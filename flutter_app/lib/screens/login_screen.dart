@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
 import 'register_screen.dart';
+import 'otp_screen.dart'; // Import the OTP screen
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -16,8 +18,36 @@ class _LoginScreenState extends State<LoginScreen> {
   void _login() async {
     setState(() => _loading = true);
     try {
-      await Provider.of<AuthService>(context, listen: false)
-          .signIn(_emailCtrl.text.trim(), _passCtrl.text.trim());
+      final auth = Provider.of<AuthService>(context, listen: false);
+      final cred = await auth.signIn(_emailCtrl.text.trim(), _passCtrl.text.trim());
+
+      // After successful login, check if the user is verified.
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).get();
+
+      if (userDoc.exists) {
+        final isVerified = userDoc.data()!['isVerified'] ?? false;
+        if (!isVerified) {
+          // If not verified, start the OTP flow.
+          final phoneNumber = userDoc.data()!['phoneNumber'];
+          final otpResult = await auth.sendOtp(phoneNumber);
+          final sessionId = otpResult.data['sessionId'];
+
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OTPScreen(
+                phoneNumber: phoneNumber,
+                sessionId: sessionId,
+              ),
+            ),
+          );
+        } 
+        // If verified, the auth state change will handle navigation to the dashboard.
+
+      } else {
+         throw Exception('User profile not found.');
+      }
+
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {

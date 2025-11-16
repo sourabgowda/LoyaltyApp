@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 class ManagerScreen extends StatefulWidget {
@@ -7,36 +9,47 @@ class ManagerScreen extends StatefulWidget {
 }
 
 class _ManagerScreenState extends State<ManagerScreen> {
-  final _customerId = TextEditingController();
-  final _amount = TextEditingController();
-  final _pointsToRedeem = TextEditingController();
+  final _customerIdCtrl = TextEditingController();
+  final _amountSpentCtrl = TextEditingController();
+  final _pointsToRedeemCtrl = TextEditingController();
   bool _loading = false;
 
-  Future<void> _credit() async {
+  Future<void> _creditPoints() async {
+    if (_customerIdCtrl.text.isEmpty || _amountSpentCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please fill all fields for crediting points.')));
+      return;
+    }
     setState(() => _loading = true);
     try {
       final callable = FirebaseFunctions.instance.httpsCallable('creditPoints');
-      final res = await callable.call({'customerId': _customerId.text.trim(), 'amountSpent': double.parse(_amount.text)});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.data['message'] ?? 'Success')));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ' + e.toString())));
+      final result = await callable.call({
+        'customerId': _customerIdCtrl.text,
+        'amountSpent': double.parse(_amountSpentCtrl.text),
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.data['message'])));
+    } on FirebaseFunctionsException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
     } finally {
       setState(() => _loading = false);
     }
   }
 
-  Future<void> _redeem() async {
+  Future<void> _redeemPoints() async {
+    if (_customerIdCtrl.text.isEmpty || _pointsToRedeemCtrl.text.isEmpty || _amountSpentCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please fill customer ID, amount spent and points to redeem.')));
+      return;
+    }
     setState(() => _loading = true);
     try {
       final callable = FirebaseFunctions.instance.httpsCallable('redeemPoints');
-      final res = await callable.call({
-        'customerId': _customerId.text.trim(),
-        'pointsToRedeem': int.parse(_pointsToRedeem.text),
-        'amountSpent': double.parse(_amount.text)
+      final result = await callable.call({
+        'customerId': _customerIdCtrl.text,
+        'pointsToRedeem': int.parse(_pointsToRedeemCtrl.text),
+        'amountSpent': double.parse(_amountSpentCtrl.text),
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.data['message'] ?? 'Success')));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ' + e.toString())));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.data['message'])));
+    } on FirebaseFunctionsException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
     } finally {
       setState(() => _loading = false);
     }
@@ -45,19 +58,32 @@ class _ManagerScreenState extends State<ManagerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Manager')),
+      appBar: AppBar(
+        title: Text('Manager Dashboard'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.exit_to_app),
+            onPressed: () => Provider.of<AuthService>(context, listen: false).signOut(),
+          )
+        ],
+      ),
       body: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(controller: _customerId, decoration: InputDecoration(labelText: 'Customer UID')),
-            TextField(controller: _amount, decoration: InputDecoration(labelText: 'Amount Spent (₹)')),
-            SizedBox(height: 12),
-            ElevatedButton(onPressed: _loading ? null : _credit, child: _loading ? CircularProgressIndicator() : Text('Credit Points')),
-            Divider(),
-            TextField(controller: _pointsToRedeem, decoration: InputDecoration(labelText: 'Points to Redeem')),
-            ElevatedButton(onPressed: _loading ? null : _redeem, child: _loading ? CircularProgressIndicator() : Text('Redeem Points')),
-          ],
+        padding: const EdgeInsets.all(16.0),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              Text('Credit Points', style: Theme.of(context).textTheme.headline6),
+              TextField(controller: _customerIdCtrl, decoration: InputDecoration(labelText: 'Customer ID')),
+              TextField(controller: _amountSpentCtrl, decoration: InputDecoration(labelText: 'Amount Spent'), keyboardType: TextInputType.number),
+              SizedBox(height: 10),
+              ElevatedButton(onPressed: _loading ? null : _creditPoints, child: _loading ? CircularProgressIndicator() : Text('Credit Points')),
+              SizedBox(height: 30),
+              Text('Redeem Points', style: Theme.of(context).textTheme.headline6),
+              TextField(controller: _pointsToRedeemCtrl, decoration: InputDecoration(labelText: 'Points to Redeem'), keyboardType: TextInputType.number),
+              SizedBox(height: 10),
+              ElevatedButton(onPressed: _loading ? null : _redeemPoints, child: _loading ? CircularProgressIndicator() : Text('Redeem Points')),
+            ],
+          ),
         ),
       ),
     );

@@ -1,81 +1,69 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper validators
-    function isAuthed() { return request.auth != null; }
-
-    function isAdmin() { return isAuthed() && request.auth.token.admin == true; }
-    function isManagerClaim() { return isAuthed() && request.auth.token.manager == true; }
-
-    function validFirstName(name) {
-      return name is string && name.size() >= 1 && name.size() <= 40 && name.matches('^[A-Za-z]{1,40}$');
+    // --- Helper Functions ---
+    function isAuthed() {
+      return request.auth != null;
     }
-    function validLastName(name) {
-      return name is string && name.size() >= 1 && name.size() <= 80 && name.matches('^[A-Za-z]+( [A-Za-z]+){0,2}$');
+    function isOwner(userId) {
+      return isAuthed() && request.auth.uid == userId;
     }
-    function validPhone(phone) {
-      return phone is string && phone.matches('^\\d{10}$');
+    function isAdmin() {
+      // Check the custom claim set by the `setUserRole` function.
+      return isAuthed() && request.auth.token.admin == true;
     }
-    function validPincode(p) {
-      return p is string && p.matches('^\\d{6}$');
+    function isManager() {
+      return isAuthed() && request.auth.token.manager == true;
     }
 
-    // USERS - docId should be auth.uid
+    // --- Collection Rules ---
+
+    // USERS
+    // User documents are primarily managed via Cloud Functions.
     match /users/{userId} {
-      allow read: if isAuthed() && request.auth.uid == userId;
-      allow create: if isAuthed() && request.auth.uid == userId
-                    && request.resource.data.keys().hasOnly(['firstName','lastName','phoneNumber','isManager','isAdmin','isVerified','points','assignedBunkId'])
-                    && validFirstName(request.resource.data.firstName)
-                    && validLastName(request.resource.data.lastName)
-                    && validPhone(request.resource.data.phoneNumber)
-                    && request.resource.data.isManager == false
-                    && request.resource.data.isAdmin == false
-                    && request.resource.data.isVerified == true
-                    && request.resource.data.points == 0
-                    && request.resource.data.assignedBunkId == 'NA';
+      // Admins can read any user profile. Users can only read their own.
+      allow read: if isAdmin() || isOwner(userId);
 
-      // Users can update only a limited set of fields on their own profile (phoneNumber allowed to change, rest read-only).
-      allow update: if isAuthed() && request.auth.uid == userId
-                    && request.resource.data.keys().hasOnly(['phoneNumber','isVerified'])
-                    && validPhone(request.resource.data.phoneNumber);
+      // Client-side creation is disallowed. Must go through `registerCustomer` function.
+      allow create: if false;
 
-      // Admins can update profiles but must not set conflicting roles (enforce exclusivity here too)
-      allow write: if isAdmin()
-                    && request.resource.data.keys().hasOnly(['firstName','lastName','phoneNumber','isManager','isAdmin','isVerified','points','assignedBunkId'])
-                    && validFirstName(request.resource.data.firstName)
-                    && validLastName(request.resource.data.lastName)
-                    && validPhone(request.resource.data.phoneNumber)
-                    && !(request.resource.data.isManager == true && request.resource.data.isAdmin == true)
-                    && (request.resource.data.points is number && request.resource.data.points >= 0);
-    }
-
-    // BUNKS
-    match /bunks/{bunkId} {
-      allow read: if true;
-      allow write: if isAdmin()
-                    && request.resource.data.keys().hasOnly(['name','location','district','state','pincode'])
-                    && request.resource.data.name is string && request.resource.data.name.size() <= 100
-                    && request.resource.data.location is string && request.resource.data.location.size() <= 50
-                    && request.resource.data.district is string && request.resource.data.district.size() <= 50
-                    && request.resource.data.state is string && request.resource.data.state.size() <= 50
-                    && validPincode(request.resource.data.pincode);
-    }
-
-    // TRANSACTIONS - clients cannot write transactions directly; only server (functions) should create them
-    match /transactions/{txnId} {
-      allow read: if isAuthed() && (isAdmin() || resource.data.customerId == request.auth.uid || resource.data.managerId == request.auth.uid);
-      allow create: if false; // prohibited for clients
+      // Updates are disallowed from the client SDK to enforce business logic
+      // in Cloud Functions. For example, `setUserRole` handles claim and doc updates.
+      // `creditPoints` handles point updates. This prevents a user from arbitrarily
+      // changing their own points or role from the client.
       allow update, delete: if false;
     }
 
-    // CONFIGS - read public, write by admin only
-    match /configs/{configId} {
-      allow read: if configId == 'global';
-      allow write: if isAdmin()
-                    && request.resource.data.keys().hasOnly(['creditPercentage','pointValue'])
-                    && (request.resource.data.creditPercentage is number && request.resource.data.creditPercentage >= 0 && request.resource.data.creditPercentage <= 100)
-                    && (request.resource.data.pointValue is number && request.resource.data.pointValue > 0);
+    // TRANSACTIONS
+    // Transactions are immutable records created by Cloud Functions.
+    match /transactions/{transactionId} {
+      // Admins can see all transactions. Users can see their own transactions.
+      allow read: if isAdmin() || (isAuthed() && resource.data.customerId == request.auth.uid);
+
+      // Transactions cannot be created, updated, or deleted from the client.
+      allow write: if false;
+    }
+
+    // BUNKS
+    // Bunk information is public to authenticated users but only writable by admins.
+    match /bunks/{bunkId} {
+      // Any authenticated user can read the list of bunks.
+      allow read: if isAuthed();
+
+      // Bunks can only be written by an Admin (via the `createBunk` function).
+      allow write: if isAdmin();
+    }
+
+    // CONFIGS
+    // The global configuration is readable by all, but only writable by admins.
+    match /configs/global {
+      // Any authenticated user can read the global config to see current loyalty rules.
+      allow read: if isAuthed();
+
+      // Only an Admin can update the global config (via the `updateGlobalConfig` function).
+      allow write: if isAdmin();
     }
   }
 }

@@ -1,5 +1,11 @@
+
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
+import 'user_management_screen.dart';
+import 'audit_trail_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   @override
@@ -7,73 +13,158 @@ class AdminScreen extends StatefulWidget {
 }
 
 class _AdminScreenState extends State<AdminScreen> {
-  final _creditPercent = TextEditingController();
-  final _pointValue = TextEditingController();
-  final _bunkName = TextEditingController();
-  final _bunkLocation = TextEditingController();
-  final _bunkDistrict = TextEditingController();
-  final _bunkState = TextEditingController();
-  final _bunkPincode = TextEditingController();
+  final _creditPercentageCtrl = TextEditingController();
+  final _pointValueCtrl = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   bool _loading = false;
 
-  Future<void> _updateConfig() async {
-    setState(() => _loading = true);
-    try {
-      final callable = FirebaseFunctions.instance.httpsCallable('updateGlobalConfig');
-      final data = {};
-      if (_creditPercent.text.trim().isNotEmpty) data['creditPercentage'] = double.parse(_creditPercent.text.trim());
-      if (_pointValue.text.trim().isNotEmpty) data['pointValue'] = double.parse(_pointValue.text.trim());
-      final res = await callable.call({'updateData': data});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.data['message'] ?? 'Updated')));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ' + e.toString())));
-    } finally {
-      setState(() => _loading = false);
-    }
-  }
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
-  Future<void> _createBunk() async {
-    setState(() => _loading = true);
+  Future<void> _updateGlobalConfig() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    setState(() {
+      _loading = true;
+    });
+
+    final updateData = {
+      'creditPercentage': double.tryParse(_creditPercentageCtrl.text),
+      'pointValue': double.tryParse(_pointValueCtrl.text),
+    };
+
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable('createBunk'); // optional server function
-      final bunk = {
-        'name': _bunkName.text.trim(),
-        'location': _bunkLocation.text.trim(),
-        'district': _bunkDistrict.text.trim(),
-        'state': _bunkState.text.trim(),
-        'pincode': _bunkPincode.text.trim()
-      };
-      final res = await callable.call({'bunk': bunk});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.data['message'] ?? 'Created')));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ' + e.toString())));
+      final callable = _functions.httpsCallable('updateGlobalConfig');
+      final result = await callable.call({'updateData': updateData});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.data['message']), backgroundColor: Colors.green),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.message}'), backgroundColor: Colors.red),
+      );
     } finally {
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Admin')),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Text('Update Global Config', style: TextStyle(fontWeight: FontWeight.bold)),
-            TextField(controller: _creditPercent, decoration: InputDecoration(labelText: 'Credit Percentage (0-100)')),
-            TextField(controller: _pointValue, decoration: InputDecoration(labelText: 'Point Value (₹ per point)')),
-            ElevatedButton(onPressed: _loading ? null : _updateConfig, child: Text('Update Config')),
-            Divider(),
-            Text('Create Bunk', style: TextStyle(fontWeight: FontWeight.bold)),
-            TextField(controller: _bunkName, decoration: InputDecoration(labelText: 'Name')),
-            TextField(controller: _bunkLocation, decoration: InputDecoration(labelText: 'Location')),
-            TextField(controller: _bunkDistrict, decoration: InputDecoration(labelText: 'District')),
-            TextField(controller: _bunkState, decoration: InputDecoration(labelText: 'State')),
-            TextField(controller: _bunkPincode, decoration: InputDecoration(labelText: 'Pincode')),
-            ElevatedButton(onPressed: _loading ? null : _createBunk, child: Text('Create Bunk')),
-          ],
-        ),
+      appBar: AppBar(
+        title: Text('Admin Panel'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.logout),
+            onPressed: () => Provider.of<AuthService>(context, listen: false).signOut(),
+          ),
+        ],
+      ),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('configs').doc('global').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return Center(child: CircularProgressIndicator());
+          }
+
+          final config = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+          _creditPercentageCtrl.text = (config['creditPercentage'] ?? '').toString();
+          _pointValueCtrl.text = (config['pointValue'] ?? '').toString();
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('System Configuration', style: Theme.of(context).textTheme.headline5),
+                  SizedBox(height: 16),
+                  TextFormField(
+                    controller: _creditPercentageCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Credit Percentage (%)',
+                      helperText: 'e.g., 1.5 for 1.5%',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    validator: (value) {
+                      final num? val = double.tryParse(value ?? '');
+                      if (val == null || val < 0 || val > 100) {
+                        return 'Must be a number between 0 and 100';
+                      }
+                      return null;
+                    },
+                  ),
+                  SizedBox(height: 16),
+                  TextFormField(
+                    controller: _pointValueCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Point Value (in Rupees)',
+                      helperText: 'e.g., 0.25 means 1 point = ₹0.25',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    validator: (value) {
+                      final num? val = double.tryParse(value ?? '');
+                      if (val == null || val <= 0) {
+                        return 'Must be a positive number';
+                      }
+                      return null;
+                    },
+                  ),
+                  SizedBox(height: 24),
+                  if (_loading)
+                    Center(child: CircularProgressIndicator())
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.save),
+                        label: Text('Save Configuration'),
+                        onPressed: _updateGlobalConfig,
+                        style: ElevatedButton.styleFrom(padding: EdgeInsets.symmetric(vertical: 16)),
+                      ),
+                    ),
+                  Divider(height: 40),
+                  Text('User Management', style: Theme.of(context).textTheme.headline5),
+                   SizedBox(height: 16),
+                  SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.people),
+                        label: Text('Manage Users'),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => UserManagementScreen()),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(padding: EdgeInsets.symmetric(vertical: 16)),
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                  SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.history),
+                        label: Text('View Audit Trail'),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => AuditTrailScreen()),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(padding: EdgeInsets.symmetric(vertical: 16)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

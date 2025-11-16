@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'otp_screen.dart'; // Import the OTP screen
 
 class RegisterScreen extends StatefulWidget {
   @override
@@ -16,23 +16,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phone = TextEditingController();
   bool _loading = false;
 
-  void _register() async {
+  void _registerAndSendOtp() async {
     setState(() => _loading = true);
     try {
       final auth = Provider.of<AuthService>(context, listen: false);
-      final cred = await auth.register(_emailCtrl.text.trim(), _passCtrl.text.trim());
-      final profile = {
+
+      // 1. Create Firebase Auth user
+      await auth.register(_emailCtrl.text.trim(), _passCtrl.text.trim());
+
+      // 2. Register customer details in Firestore via Cloud Function
+      final customerData = {
         'firstName': _firstName.text.trim(),
         'lastName': _lastName.text.trim(),
         'phoneNumber': _phone.text.trim(),
-        'isManager': false,
-        'isAdmin': false,
-        'isVerified': true,
-        'points': 0,
-        'assignedBunkId': 'NA',
       };
-      await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set(profile);
-      Navigator.pop(context);
+      await auth.registerCustomer(customerData);
+
+      // 3. Send OTP
+      final otpResult = await auth.sendOtp(_phone.text.trim());
+      final sessionId = otpResult.data['sessionId'];
+
+      // 4. Navigate to OTP screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OTPScreen(
+            phoneNumber: _phone.text.trim(),
+            sessionId: sessionId,
+          ),
+        ),
+      );
+
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
@@ -54,7 +68,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             TextField(controller: _emailCtrl, decoration: InputDecoration(labelText: 'Email')),
             TextField(controller: _passCtrl, decoration: InputDecoration(labelText: 'Password'), obscureText: true),
             SizedBox(height: 20),
-            ElevatedButton(onPressed: _loading ? null : _register, child: _loading ? CircularProgressIndicator() : Text('Register'))
+            ElevatedButton(onPressed: _loading ? null : _registerAndSendOtp, child: _loading ? CircularProgressIndicator() : Text('Register & Send OTP'))
           ]),
         ),
       ),
