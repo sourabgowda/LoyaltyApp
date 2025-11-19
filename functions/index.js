@@ -2,15 +2,18 @@
 // index.js - Cloud Functions for Loyalty App (CommonJS)
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const axios = require('axios');
+// const axios = require('axios'); // Commented out for email/password auth
 admin.initializeApp();
 const db = admin.firestore();
 
-const TWOF_API_KEY = functions.config().twofactor?.api_key || 'YOUR_2FACTOR_API_KEY';
+// const TWOF_API_KEY = functions.config().twofactor?.api_key || 'YOUR_2FACTOR_API_KEY'; // Commented out for email/password auth
 
 // --- Validation Helpers ---
-function isValidPhoneNumber(phoneNumber) {
-  return typeof phoneNumber === 'string' && /^\d{10}$/.test(phoneNumber);
+function isValidEmail(email) {
+    return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+function isValidPassword(password) {
+    return typeof password === 'string' && password.length >= 6;
 }
 function isValidFirstName(firstName) {
   return typeof firstName === 'string' && /^[A-Za-z]{1,40}$/.test(firstName);
@@ -38,42 +41,56 @@ async function isAdmin(userId) {
 
 // --- Callable Functions ---
 
-// registerCustomer - Updated to use 'role'
+// registerCustomer - Updated for email/password authentication
 exports.registerCustomer = functions.https.onCall(async (data, context) => {
-  const firstName = data && data.firstName ? String(data.firstName).trim() : null;
-  const lastName = data && data.lastName ? String(data.lastName).trim() : null;
-  const phoneNumber = data && data.phoneNumber ? String(data.phoneNumber).trim() : null;
+    const firstName = data && data.firstName ? String(data.firstName).trim() : null;
+    const lastName = data && data.lastName ? String(data.lastName).trim() : null;
+    const email = data && data.email ? String(data.email).trim() : null;
+    const password = data && data.password ? String(data.password).trim() : null;
 
-  if (!isValidFirstName(firstName) || !isValidLastName(lastName)) {
-    throw new functions.https.HttpsError('invalid-argument', 'Invalid first or last name format.');
-  }
-  if (!isValidPhoneNumber(phoneNumber)) {
-    throw new functions.https.HttpsError('invalid-argument', 'Invalid phone number format.');
-  }
+    if (!isValidFirstName(firstName) || !isValidLastName(lastName)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid first or last name format.');
+    }
+    if (!isValidEmail(email)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid email format.');
+    }
+    if (!isValidPassword(password)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Password must be at least 6 characters long.');
+    }
 
-  const existing = await db.collection('users').where('phoneNumber', '==', phoneNumber).limit(1).get();
-  if (!existing.empty) {
-    throw new functions.https.HttpsError('already-exists', 'User with this phone number already exists.');
-  }
+    try {
+        const userRecord = await admin.auth().createUser({
+            email: email,
+            password: password,
+            displayName: `${firstName} ${lastName}`
+        });
 
-  const newUser = {
-    firstName,
-    lastName,
-    phoneNumber,
-    role: 'customer', // Use 'role' field
-    isVerified: false,
-    points: 0,
-    assignedBunkId: 'NA'
-  };
+        const newUser = {
+            firstName,
+            lastName,
+            email,
+            role: 'customer',
+            isVerified: false, // User needs to verify their email
+            points: 0,
+            assignedBunkId: 'NA'
+        };
 
-  const docRef = await db.collection('users').add(newUser);
-  return { status: 'success', message: 'User profile created. Please verify phone number.', userId: docRef.id };
+        await db.collection('users').doc(userRecord.uid).set(newUser);
+        return { status: 'success', message: 'User profile created. Please verify your email.', userId: userRecord.uid };
+
+    } catch (error) {
+        if (error.code === 'auth/email-already-exists') {
+            throw new functions.https.HttpsError('already-exists', 'User with this email already exists.');
+        }
+        throw new functions.https.HttpsError('internal', 'Error creating user.', error);
+    }
 });
+
 
 // createBunk - No changes
 exports.createBunk = functions.https.onCall(async (data, context) => {
     const adminId = context.auth && context.auth.uid ? context.auth.uid : null;
-    if (!adminId || !(await isAdmin(adminId))) {
+    if (!adminId || !(await module.exports.isAdmin(adminId))) {
         throw new functions.https.HttpsError('permission-denied', 'Only admins can create bunks.');
     }
     const { name, location, district, state, pincode } = data;
@@ -85,10 +102,10 @@ exports.createBunk = functions.https.onCall(async (data, context) => {
     return { status: 'success', message: 'Bunk created successfully.', bunkId: docRef.id };
 });
 
-// creditPoints - No changes
+// creditPoints
 exports.creditPoints = functions.https.onCall(async (data, context) => {
   const managerId = context.auth && context.auth.uid ? context.auth.uid : null;
-  if (!managerId || !(await isManager(managerId))) {
+  if (!managerId || !(await module.exports.isManager(managerId))) {
     throw new functions.https.HttpsError('permission-denied', 'Only managers can credit points.');
   }
   const customerId = data && data.customerId ? String(data.customerId) : null;
@@ -140,10 +157,10 @@ exports.creditPoints = functions.https.onCall(async (data, context) => {
   });
 });
 
-// redeemPoints - No changes
+// redeemPoints
 exports.redeemPoints = functions.https.onCall(async (data, context) => {
   const managerId = context.auth && context.auth.uid ? context.auth.uid : null;
-  if (!managerId || !(await isManager(managerId))) {
+  if (!managerId || !(await module.exports.isManager(managerId))) {
     throw new functions.https.HttpsError('permission-denied', 'Only managers can redeem points.');
   }
   const customerId = data && data.customerId ? String(data.customerId) : null;
@@ -190,7 +207,7 @@ exports.redeemPoints = functions.https.onCall(async (data, context) => {
 // setUserRole - Replaces and simplifies previous role-setting logic.
 exports.setUserRole = functions.https.onCall(async (data, context) => {
   const adminId = context.auth && context.auth.uid ? context.auth.uid : null;
-  if (!adminId || !(await isAdmin(adminId))) {
+  if (!adminId || !(await module.exports.isAdmin(adminId))) {
     throw new functions.https.HttpsError('permission-denied', 'Only admins can set user roles.');
   }
 
@@ -215,10 +232,10 @@ exports.setUserRole = functions.https.onCall(async (data, context) => {
 });
 
 
-// updateGlobalConfig - No changes
+// updateGlobalConfig
 exports.updateGlobalConfig = functions.https.onCall(async (data, context) => {
   const adminId = context.auth && context.auth.uid ? context.auth.uid : null;
-  if (!adminId || !(await isAdmin(adminId))) {
+  if (!adminId || !(await module.exports.isAdmin(adminId))) {
     throw new functions.https.HttpsError('permission-denied', 'Only admins can update global configuration.');
   }
   const { updateData } = data;
@@ -230,55 +247,18 @@ exports.updateGlobalConfig = functions.https.onCall(async (data, context) => {
   return { status: 'success', message: 'Global configuration updated.' };
 });
 
-// sendOtp & verifyOtp - No changes
-exports.sendOtp = functions.https.onCall(async (data) => {
-  const phoneNumber = data && data.phoneNumber ? String(data.phoneNumber).trim() : null;
-  if (!isValidPhoneNumber(phoneNumber)) {
-    throw new functions.https.HttpsError('invalid-argument', 'Invalid phone number format.');
-  }
-  const url = `https://2factor.in/API/V1/${TWOF_API_KEY}/SMS/${phoneNumber}/AUTOGEN`;
-  try {
-    const response = await axios.get(url);
-    if (response.data.Status !== 'Success') {
-      throw new functions.https.HttpsError('internal', 'Failed to send OTP.', response.data);
+// onUserCreate
+exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
+    if (user.email && user.emailVerified) {
+        const userRef = db.collection('users').doc(user.uid);
+        const userDoc = await userRef.get();
+        if (userDoc.exists) {
+            await userRef.update({ isVerified: true });
+        }
     }
-    return { status: 'success', sessionId: response.data.Details };
-  } catch (error) {
-    console.error('OTP Send Error:', error);
-    throw new functions.https.HttpsError('internal', 'Failed to send OTP.');
-  }
 });
 
-exports.verifyOtp = functions.https.onCall(async (data, context) => {
-  const userId = context.auth && context.auth.uid ? context.auth.uid : null;
-  if (!userId) {
-    throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to verify an OTP.');
-  }
-  const { sessionId, otp } = data;
-  if (!sessionId || !otp) {
-    throw new functions.https.HttpsError('invalid-argument', 'sessionId and otp are required.');
-  }
-  const url = `https://2factor.in/API/V1/${TWOF_API_KEY}/SMS/VERIFY/${sessionId}/${otp}`;
-  try {
-    const response = await axios.get(url);
-    if (response.data.Status !== 'Success') {
-      throw new functions.https.HttpsError('internal', 'OTP verification failed.', response.data);
-    }
-    await db.collection('users').doc(userId).update({ isVerified: true });
-    return { status: 'success', message: 'Phone number verified successfully.' };
-  } catch (error) {
-    console.error('OTP Verify Error:', error);
-    throw new functions.https.HttpsError('internal', 'OTP verification failed.');
-  }
-});
-
-// onUserUpdate - No changes
-exports.onUserUpdate = functions.firestore.document('users/{userId}')
-  .onUpdate(async (change) => {
-    const { phoneNumber: newPhone, isVerified: newVerified } = change.after.data();
-    const { phoneNumber: oldPhone } = change.before.data();
-    if (newPhone !== oldPhone && newVerified !== false) {
-      return change.after.ref.update({ isVerified: false });
-    }
-    return null;
-  });
+// Export helper functions for testing
+module.exports.isAdmin = isAdmin;
+module.exports.isManager = isManager;
+module.exports.getUserDoc = getUserDoc;
