@@ -4,24 +4,17 @@ const assert = require('assert');
 const admin = require('firebase-admin');
 const sinon = require('sinon');
 
-// 1. STUB INITIALIZATION
 sinon.stub(admin, 'initializeApp');
 
-// 2. FIRESTORE & AUTH STUBS
-
-// Stubs for document methods
 const userSetStub = sinon.stub().resolves();
 const userUpdateStub = sinon.stub().resolves();
 const bunkAddStub = sinon.stub().resolves({ id: 'new-bunk-123' });
 const configSetStub = sinon.stub().resolves();
 const transactionSetStub = sinon.stub().resolves();
 
-// Stubs for get calls
-const txGetStub = sinon.stub(); // For `get` calls inside a transaction
-const userGetStub = sinon.stub(); // For non-transaction `get` calls
+const txGetStub = sinon.stub();
+const userGetStub = sinon.stub();
 
-// Stubs for document references
-// These now return objects with all the methods our functions use.
 const userDocRef = { set: userSetStub, update: userUpdateStub, get: userGetStub, path: 'users/test-user' };
 const bunkDocRef = { get: txGetStub }; 
 const configDocRef = { set: configSetStub, get: txGetStub };
@@ -32,21 +25,18 @@ const bunkDocStub = sinon.stub().returns(bunkDocRef);
 const configDocStub = sinon.stub().returns(configDocRef);
 const transactionDocStub = sinon.stub().returns(transactionDocRef);
 
-// Stub for collection references
 const collectionStub = sinon.stub();
 collectionStub.withArgs('users').returns({ doc: userDocStub });
 collectionStub.withArgs('bunks').returns({ add: bunkAddStub, doc: bunkDocStub });
 collectionStub.withArgs('configs').returns({ doc: configDocStub });
 collectionStub.withArgs('transactions').returns({ doc: transactionDocStub });
 
-// The master Firestore stub
 sinon.stub(admin, 'firestore').get(() => {
     const firestore = () => ({
         collection: collectionStub,
         runTransaction: async (updateFunction) => {
             const tx = { 
                 get: txGetStub,
-                // Pass the update/set calls through to the doc reference stubs
                 update: (docRef, data) => docRef.update(data), 
                 set: (docRef, data) => docRef.set(data)
             };
@@ -57,7 +47,6 @@ sinon.stub(admin, 'firestore').get(() => {
     return firestore;
 });
 
-// Auth stubs
 const createUserStub = sinon.stub().resolves({ uid: '123456' });
 const setCustomUserClaimsStub = sinon.stub().resolves();
 const getUserByEmailStub = sinon.stub();
@@ -67,15 +56,13 @@ sinon.stub(admin, 'auth').get(() => () => ({
   getUserByEmail: getUserByEmailStub
 }));
 
-
-// 3. REQUIRE & STUB HELPER FUNCTIONS
 const myFunctions = require('../index.js');
-const isAdminStub = sinon.stub(myFunctions, 'isAdmin');
-const isManagerStub = sinon.stub(myFunctions, 'isManager');
-const getUserDocStub = sinon.stub(myFunctions, 'getUserDoc');
+const authUtils = require('../utils/auth');
 
+const isAdminStub = sinon.stub(authUtils, 'isAdmin');
+const isManagerStub = sinon.stub(authUtils, 'isManager');
+const getUserDocStub = sinon.stub(authUtils, 'getUserDoc');
 
-// 4. TESTS
 describe('Cloud Functions', () => {
 
   after(() => { sinon.restore(); test.cleanup(); });
@@ -112,8 +99,6 @@ describe('Cloud Functions', () => {
         const wrapped = test.wrap(myFunctions.registerCustomer);
         await assert.rejects(wrapped({ firstName: 'Test', lastName: 'User', email: 'test@test.com', password: 'password' }), { code: 'already-exists' });
     });
-    //This test is not necessary since firebase does not allow phone numbers
-    //it('should throw an error if phone number already exists', async () => {});
   });
 
   describe('createBunk', () => {
@@ -143,11 +128,31 @@ describe('Cloud Functions', () => {
     });
   });
 
+  describe('assignManagerToBunk', () => {
+    it('should assign a manager to a bunk if admin', async () => {
+      isAdminStub.resolves(true);
+      const wrapped = test.wrap(myFunctions.assignManagerToBunk);
+      await wrapped({ managerUid: 'manager-uid', bunkId: 'bunk-123' }, { auth: { uid: 'admin-uid' } });
+      assert(userUpdateStub.calledOnceWith({ assignedBunkId: 'bunk-123' }));
+    });
+
+    it('should deny if not admin', async () => {
+      isAdminStub.resolves(false);
+      const wrapped = test.wrap(myFunctions.assignManagerToBunk);
+      await assert.rejects(wrapped({}, { auth: { uid: 'user-uid' } }), { code: 'permission-denied' });
+    });
+
+    it('should throw an error if managerUid or bunkId are missing', async () => {
+      isAdminStub.resolves(true);
+      const wrapped = test.wrap(myFunctions.assignManagerToBunk);
+      await assert.rejects(wrapped({ managerUid: 'manager-uid' }, { auth: { uid: 'admin-uid' } }), { code: 'invalid-argument' });
+    });
+  });
+
   describe('creditPoints', () => {
     it('should credit points if manager', async () => {
       isManagerStub.resolves(true);
 
-      // Correctly add the `.ref` property to the snapshot mock
       txGetStub.onCall(0).resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }), ref: userDocRef });
       txGetStub.onCall(1).resolves({ exists: true, data: () => ({ isVerified: true, points: 100 }), ref: userDocRef });
       txGetStub.onCall(2).resolves({ exists: true, data: () => ({ creditPercentage: 10 }), ref: configDocRef });
@@ -163,6 +168,11 @@ describe('Cloud Functions', () => {
         isManagerStub.resolves(false);
         const wrapped = test.wrap(myFunctions.creditPoints);
         await assert.rejects(wrapped({}, { auth: { uid: 'user-uid' } }), { code: 'permission-denied' });
+    });
+    it('should throw a permission-denied error if a manager tries to credit points to their own account', async () => {
+        isManagerStub.resolves(true);
+        const wrapped = test.wrap(myFunctions.creditPoints);
+        await assert.rejects(wrapped({ customerId: 'manager-uid', amountSpent: 500 }, { auth: { uid: 'manager-uid' } }), { code: 'permission-denied' });
     });
     it('should throw a not-found error if the customer does not exist', async () => {
         isManagerStub.resolves(true);
@@ -189,11 +199,11 @@ describe('Cloud Functions', () => {
     it('should redeem points if manager', async () => {
       isManagerStub.resolves(true);
       
-      // Correctly add the `.ref` property here too
-      txGetStub.onCall(0).resolves({ exists: true, data: () => ({}), ref: userDocRef });
+      txGetStub.onCall(0).resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }), ref: userDocRef });
       txGetStub.onCall(1).resolves({ exists: true, data: () => ({ isVerified: true, points: 200 }), ref: userDocRef });
-      txGetStub.onCall(2).resolves({ exists: true, data: () => ({ pointValue: 0.5 }), ref: configDocRef });
-      
+      txGetStub.onCall(2).resolves({ exists: true, data: () => ({ redemptionRate: 0.5 }), ref: configDocRef });
+      txGetStub.onCall(3).resolves({ exists: true, data: () => ({ name: 'Test Bunk' }), ref: bunkDocRef });
+
       const wrapped = test.wrap(myFunctions.redeemPoints);
       await wrapped({ customerId: 'cust-id', pointsToRedeem: 100 }, { auth: { uid: 'manager-uid' } });
 
@@ -205,11 +215,16 @@ describe('Cloud Functions', () => {
         const wrapped = test.wrap(myFunctions.redeemPoints);
         await assert.rejects(wrapped({}, { auth: { uid: 'user-uid' } }), { code: 'permission-denied' });
     });
+    it('should throw a permission-denied error if a manager tries to redeem their own points', async () => {
+        isManagerStub.resolves(true);
+        const wrapped = test.wrap(myFunctions.redeemPoints);
+        await assert.rejects(wrapped({ customerId: 'manager-uid', pointsToRedeem: 100 }, { auth: { uid: 'manager-uid' } }), { code: 'permission-denied' });
+    });
     it('should throw an error if the customer has insufficient points', async () => {
         isManagerStub.resolves(true);
-        txGetStub.onCall(0).resolves({ exists: true, data: () => ({}), ref: userDocRef });
+        txGetStub.onCall(0).resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }), ref: userDocRef });
         txGetStub.onCall(1).resolves({ exists: true, data: () => ({ isVerified: true, points: 50 }), ref: userDocRef });
-        txGetStub.onCall(2).resolves({ exists: true, data: () => ({ pointValue: 0.5 }), ref: configDocRef });
+        txGetStub.onCall(2).resolves({ exists: true, data: () => ({ redemptionRate: 0.5 }), ref: configDocRef });
         const wrapped = test.wrap(myFunctions.redeemPoints);
         await assert.rejects(wrapped({ customerId: 'cust-id', pointsToRedeem: 100 }, { auth: { uid: 'manager-uid' } }), { code: 'failed-precondition' });
     });

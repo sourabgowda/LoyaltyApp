@@ -7,7 +7,7 @@ This is a full-stack mobile application for a fuel loyalty program, built with a
 ## ✨ Features
 
 - **Customer Loyalty Program:** Customers earn points based on the amount spent and can redeem them for discounts.
-- **Secure User Authentication:** Users register and log in using their phone number, verified via a one-time password (OTP).
+- **Secure User Authentication:** Users register and log in using their email and password. Email verification is required to activate the account.
 - **Role-Based Access Control:** The system supports three distinct roles with specific permissions:
   - **Customer:** Can view their points and transaction history.
   - **Manager:** Can credit and redeem points for customers at their assigned bunk.
@@ -29,7 +29,6 @@ This is a full-stack mobile application for a fuel loyalty program, built with a
 - **Key Backend Dependencies:**
   - `firebase-admin`: For privileged backend access to the Firebase project.
   - `firebase-functions`: The SDK for writing Cloud Functions.
-  - `axios`: For making HTTP requests to the OTP service.
 
 ---
 
@@ -48,18 +47,14 @@ Follow these steps to set up and run the project locally.
 1.  Create a new project in the [Firebase Console](https://console.firebase.google.com/).
 2.  Add an **Android** or **iOS** app to your Firebase project and follow the setup instructions to include the `google-services.json` (Android) or `GoogleService-Info.plist` (iOS) file in your `flutter_app`.
 3.  In the console, enable the following services:
-    - **Authentication:** Enable the `Phone Number` sign-in provider.
+    - **Authentication:** Enable the `Email/Password` sign-in provider.
     - **Firestore Database:** Create a new database in production mode.
 
 ### 2. Deploy the Backend
 
 1.  Navigate to the `functions` directory: `cd functions`
 2.  Install the Node.js dependencies: `npm install`
-3.  **Set API Key:** You need to set your 2Factor.in API key for the OTP service. Run the following command, replacing `YOUR_API_KEY` with your actual key:
-    ```bash
-    firebase functions:config:set twofactor.api_key="YOUR_API_KEY"
-    ```
-4.  Deploy the Cloud Functions:
+3.  Deploy the Cloud Functions:
     ```bash
     firebase deploy --only functions
     ```
@@ -68,7 +63,7 @@ Follow these steps to set up and run the project locally.
 
 The project includes a script to seed the database with necessary initial data.
 
-1.  **Create Admin User Manually:** In the Firebase Authentication console, manually add a new user (e.g., with an email or phone number) who will be your administrator. Copy the **User UID** for this new user.
+1.  **Create Admin User Manually:** In the Firebase Authentication console, manually add a new user (e.g., with an email and password) who will be your administrator. Copy the **User UID** for this new user.
 2.  **Update the Seed Script:** Open `seed_database.sh` and replace `REPLACE_WITH_ADMIN_UID` with the UID you just copied.
 3.  **Run the Script:** Execute the script from the project root:
     ```bash
