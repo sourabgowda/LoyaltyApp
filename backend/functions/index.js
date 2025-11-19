@@ -21,6 +21,9 @@ function isValidFirstName(firstName) {
 function isValidLastName(lastName) {
   return typeof lastName === 'string' && /^[A-Za-z]+(?: [A-Za-z]+){0,2}$/.test(lastName) && lastName.length <= 80;
 }
+function isValidPincode(pincode) {
+    return typeof pincode === 'string' && /^[1-9][0-9]{5}$/.test(pincode);
+}
 
 // --- Role & User Helpers ---
 async function getUserDoc(userId) {
@@ -48,6 +51,9 @@ exports.registerCustomer = functions.https.onCall(async (data, context) => {
     const email = data && data.email ? String(data.email).trim() : null;
     const password = data && data.password ? String(data.password).trim() : null;
 
+    if (!firstName || !lastName || !email || !password) {
+        throw new functions.https.HttpsError('invalid-argument', 'Missing required fields.');
+    }
     if (!isValidFirstName(firstName) || !isValidLastName(lastName)) {
         throw new functions.https.HttpsError('invalid-argument', 'Invalid first or last name format.');
     }
@@ -96,6 +102,9 @@ exports.createBunk = functions.https.onCall(async (data, context) => {
     const { name, location, district, state, pincode } = data;
     if (!name || !location || !district || !state || !pincode) {
         throw new functions.https.HttpsError('invalid-argument', 'Bunk details are required.');
+    }
+    if (!isValidPincode(pincode)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid pincode format.');
     }
     const bunkData = { name, location, district, state, pincode };
     const docRef = await db.collection('bunks').add(bunkData);
@@ -216,6 +225,11 @@ exports.setUserRole = functions.https.onCall(async (data, context) => {
 
   if (!targetUid || !newRole || !allowedRoles.includes(newRole)) {
     throw new functions.https.HttpsError('invalid-argument', 'A valid targetUid and newRole are required.');
+  }
+
+  const user = await module.exports.getUserDoc(targetUid);
+  if (!user) {
+    throw new functions.https.HttpsError('not-found', 'The target user does not exist.');
   }
 
   // Set custom claims

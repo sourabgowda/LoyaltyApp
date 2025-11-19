@@ -1,3 +1,4 @@
+
 const test = require('firebase-functions-test')();
 const assert = require('assert');
 const admin = require('firebase-admin');
@@ -59,15 +60,20 @@ sinon.stub(admin, 'firestore').get(() => {
 // Auth stubs
 const createUserStub = sinon.stub().resolves({ uid: '123456' });
 const setCustomUserClaimsStub = sinon.stub().resolves();
+const getUserByEmailStub = sinon.stub();
 sinon.stub(admin, 'auth').get(() => () => ({
   createUser: createUserStub,
   setCustomUserClaims: setCustomUserClaimsStub,
+  getUserByEmail: getUserByEmailStub
 }));
+
 
 // 3. REQUIRE & STUB HELPER FUNCTIONS
 const myFunctions = require('../index.js');
 const isAdminStub = sinon.stub(myFunctions, 'isAdmin');
 const isManagerStub = sinon.stub(myFunctions, 'isManager');
+const getUserDocStub = sinon.stub(myFunctions, 'getUserDoc');
+
 
 // 4. TESTS
 describe('Cloud Functions', () => {
@@ -79,7 +85,7 @@ describe('Cloud Functions', () => {
                      transactionSetStub, userDocStub, bunkDocStub, configDocStub, 
                      transactionDocStub, collectionStub, createUserStub, 
                      setCustomUserClaimsStub, isAdminStub, isManagerStub, 
-                     txGetStub, userGetStub];
+                     txGetStub, userGetStub, getUserByEmailStub, getUserDocStub];
       stubs.forEach(s => s.resetHistory());
   });
 
@@ -89,13 +95,32 @@ describe('Cloud Functions', () => {
       await wrapped({ firstName: 'Test', lastName: 'User', email: 'test@example.com', password: 'password' });
       assert(userSetStub.calledOnce);
     });
+    it('should throw an error if required fields are missing', async () => {
+        const wrapped = test.wrap(myFunctions.registerCustomer);
+        await assert.rejects(wrapped({ firstName: 'Test' }), { code: 'invalid-argument' });
+    });
+    it('should throw an error for invalid email format', async () => {
+        const wrapped = test.wrap(myFunctions.registerCustomer);
+        await assert.rejects(wrapped({ firstName: 'Test', lastName: 'User', email: 'test', password: 'password' }), { code: 'invalid-argument' });
+    });
+    it('should throw an error for a short password', async () => {
+        const wrapped = test.wrap(myFunctions.registerCustomer);
+        await assert.rejects(wrapped({ firstName: 'Test', lastName: 'User', email: 'test@test.com', password: '123' }), { code: 'invalid-argument' });
+    });
+    it('should throw an error if email already exists', async () => {
+        createUserStub.throws({code: 'auth/email-already-exists'});
+        const wrapped = test.wrap(myFunctions.registerCustomer);
+        await assert.rejects(wrapped({ firstName: 'Test', lastName: 'User', email: 'test@test.com', password: 'password' }), { code: 'already-exists' });
+    });
+    //This test is not necessary since firebase does not allow phone numbers
+    //it('should throw an error if phone number already exists', async () => {});
   });
 
   describe('createBunk', () => {
     it('should create a bunk if admin', async () => {
       isAdminStub.resolves(true);
       const wrapped = test.wrap(myFunctions.createBunk);
-      const bunkData = { name: 'B', location: 'L', district: 'D', state: 'S', pincode: 'P' };
+      const bunkData = { name: 'B', location: 'L', district: 'D', state: 'S', pincode: '123456' };
       await wrapped(bunkData, { auth: { uid: 'admin-uid' } });
       assert(bunkAddStub.calledOnceWith(bunkData));
     });
@@ -104,6 +129,17 @@ describe('Cloud Functions', () => {
       isAdminStub.resolves(false);
       const wrapped = test.wrap(myFunctions.createBunk);
       await assert.rejects(wrapped({}, { auth: { uid: 'user-uid' } }), { code: 'permission-denied' });
+    });
+    it('should throw an error if required bunk data is missing', async () => {
+        isAdminStub.resolves(true);
+        const wrapped = test.wrap(myFunctions.createBunk);
+        await assert.rejects(wrapped({ name: 'B' }, { auth: { uid: 'admin-uid' } }), { code: 'invalid-argument' });
+    });
+    it('should throw an error for an invalid pincode', async () => {
+        isAdminStub.resolves(true);
+        const bunkData = { name: 'B', location: 'L', district: 'D', state: 'S', pincode: '123' };
+        const wrapped = test.wrap(myFunctions.createBunk);
+        await assert.rejects(wrapped(bunkData, { auth: { uid: 'admin-uid' } }), { code: 'invalid-argument' });
     });
   });
 
@@ -123,6 +159,30 @@ describe('Cloud Functions', () => {
       assert(userUpdateStub.calledOnceWith({ points: 150 }));
       assert(transactionSetStub.calledOnce);
     });
+    it('should throw a permission-denied error if the user is not a manager', async () => {
+        isManagerStub.resolves(false);
+        const wrapped = test.wrap(myFunctions.creditPoints);
+        await assert.rejects(wrapped({}, { auth: { uid: 'user-uid' } }), { code: 'permission-denied' });
+    });
+    it('should throw a not-found error if the customer does not exist', async () => {
+        isManagerStub.resolves(true);
+        txGetStub.onCall(0).resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }), ref: userDocRef });
+        txGetStub.onCall(1).resolves({ exists: false });
+        const wrapped = test.wrap(myFunctions.creditPoints);
+        await assert.rejects(wrapped({ customerId: 'cust-id', amountSpent: 500 }, { auth: { uid: 'manager-uid' } }), { code: 'not-found' });
+    });
+    it('should throw an error if the customer is not verified', async () => {
+        isManagerStub.resolves(true);
+        txGetStub.onCall(0).resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }), ref: userDocRef });
+        txGetStub.onCall(1).resolves({ exists: true, data: () => ({ isVerified: false, points: 100 }), ref: userDocRef });
+        const wrapped = test.wrap(myFunctions.creditPoints);
+        await assert.rejects(wrapped({ customerId: 'cust-id', amountSpent: 500 }, { auth: { uid: 'manager-uid' } }), { code: 'failed-precondition' });
+    });
+    it('should throw an invalid-argument error for a non-positive amount', async () => {
+        isManagerStub.resolves(true);
+        const wrapped = test.wrap(myFunctions.creditPoints);
+        await assert.rejects(wrapped({ customerId: 'cust-id', amountSpent: 0 }, { auth: { uid: 'manager-uid' } }), { code: 'invalid-argument' });
+    });
   });
 
   describe('redeemPoints', () => {
@@ -140,15 +200,51 @@ describe('Cloud Functions', () => {
       assert(userUpdateStub.calledOnceWith({ points: 100 }));
       assert(transactionSetStub.calledOnce);
     });
+    it('should throw a permission-denied error if the user is not a manager', async () => {
+        isManagerStub.resolves(false);
+        const wrapped = test.wrap(myFunctions.redeemPoints);
+        await assert.rejects(wrapped({}, { auth: { uid: 'user-uid' } }), { code: 'permission-denied' });
+    });
+    it('should throw an error if the customer has insufficient points', async () => {
+        isManagerStub.resolves(true);
+        txGetStub.onCall(0).resolves({ exists: true, data: () => ({}), ref: userDocRef });
+        txGetStub.onCall(1).resolves({ exists: true, data: () => ({ isVerified: true, points: 50 }), ref: userDocRef });
+        txGetStub.onCall(2).resolves({ exists: true, data: () => ({ pointValue: 0.5 }), ref: configDocRef });
+        const wrapped = test.wrap(myFunctions.redeemPoints);
+        await assert.rejects(wrapped({ customerId: 'cust-id', pointsToRedeem: 100 }, { auth: { uid: 'manager-uid' } }), { code: 'failed-precondition' });
+    });
+    it('should throw an invalid-argument error for non-positive points', async () => {
+        isManagerStub.resolves(true);
+        const wrapped = test.wrap(myFunctions.redeemPoints);
+        await assert.rejects(wrapped({ customerId: 'cust-id', pointsToRedeem: 0 }, { auth: { uid: 'manager-uid' } }), { code: 'invalid-argument' });
+    });
   });
 
   describe('setUserRole', () => {
     it('should set role if admin', async () => {
       isAdminStub.resolves(true);
+      getUserDocStub.resolves({data: {},
+      ref: {}}); 
       const wrapped = test.wrap(myFunctions.setUserRole);
       await wrapped({ targetUid: 'test-user-id', newRole: 'manager' }, { auth: { uid: 'admin-uid' } });
       assert(setCustomUserClaimsStub.calledOnceWith('test-user-id', { manager: true }));
       assert(userUpdateStub.calledOnceWith({ role: 'manager' }));
+    });
+    it('should deny access if the user is not an admin', async () => {
+        isAdminStub.resolves(false);
+        const wrapped = test.wrap(myFunctions.setUserRole);
+        await assert.rejects(wrapped({}, { auth: { uid: 'user-uid' } }), { code: 'permission-denied' });
+    });
+    it('should throw an error for an invalid role', async () => {
+        isAdminStub.resolves(true);
+        const wrapped = test.wrap(myFunctions.setUserRole);
+        await assert.rejects(wrapped({ targetUid: 'test-user-id', newRole: 'invalid' }, { auth: { uid: 'admin-uid' } }), { code: 'invalid-argument' });
+    });
+    it('should throw a not-found error if the target user does not exist', async () => {
+        isAdminStub.resolves(true);
+        getUserDocStub.resolves(null);
+        const wrapped = test.wrap(myFunctions.setUserRole);
+        await assert.rejects(wrapped({ targetUid: 'test-user-id', newRole: 'manager' }, { auth: { uid: 'admin-uid' } }), { code: 'not-found' });
     });
   });
 
@@ -159,6 +255,16 @@ describe('Cloud Functions', () => {
       await wrapped({ updateData: { creditPercentage: 20 } }, { auth: { uid: 'admin-uid' } });
       assert(configSetStub.calledOnceWith({ creditPercentage: 20 }, { merge: true }));
     });
+    it('should deny access if the user is not an admin', async () => {
+        isAdminStub.resolves(false);
+        const wrapped = test.wrap(myFunctions.updateGlobalConfig);
+        await assert.rejects(wrapped({}, { auth: { uid: 'user-uid' } }), { code: 'permission-denied' });
+    });
+    it('should throw an error for invalid updateData', async () => {
+        isAdminStub.resolves(true);
+        const wrapped = test.wrap(myFunctions.updateGlobalConfig);
+        await assert.rejects(wrapped({ updateData: 123 }, { auth: { uid: 'admin-uid' } }), { code: 'invalid-argument' });
+    });
   });
 
   describe('onUserCreate', () => {
@@ -167,6 +273,18 @@ describe('Cloud Functions', () => {
       const wrapped = test.wrap(myFunctions.onUserCreate);
       await wrapped({ uid: 'u', email: 'e', emailVerified: true });
       assert(userUpdateStub.calledOnceWith({ isVerified: true }));
+    });
+    it('should not update isVerified if email is not verified', async () => {
+        userGetStub.resolves({ exists: true });
+        const wrapped = test.wrap(myFunctions.onUserCreate);
+        await wrapped({ uid: 'u', email: 'e', emailVerified: false });
+        assert(userUpdateStub.notCalled);
+    });
+    it('should not throw an error if the user document does not exist', async () => {
+        userGetStub.resolves({ exists: false });
+        const wrapped = test.wrap(myFunctions.onUserCreate);
+        await wrapped({ uid: 'u', email: 'e', emailVerified: true });
+        assert(userUpdateStub.notCalled);
     });
   });
 });
