@@ -1,0 +1,20 @@
+{
+  "admin": {
+    "firstName": "Admin",
+    "lastName": "User",
+    "email": "admin@test.com",
+    "password": "password123"
+  },
+  "manager": {
+    "firstName": "Manager",
+    "lastName": "User",
+    "email": "manager@test.com",
+    "password": "password123"
+  },
+  "customer": {
+    "firstName": "Customer",
+    "lastName": "User",
+    "email": "customer@test.com",
+    "password": "password123"
+  }
+}

@@ -50,10 +50,12 @@ sinon.stub(admin, 'firestore').get(() => {
 const createUserStub = sinon.stub().resolves({ uid: '123456' });
 const setCustomUserClaimsStub = sinon.stub().resolves();
 const getUserByEmailStub = sinon.stub();
+const getUserStub = sinon.stub();
 sinon.stub(admin, 'auth').get(() => () => ({
   createUser: createUserStub,
   setCustomUserClaims: setCustomUserClaimsStub,
-  getUserByEmail: getUserByEmailStub
+  getUserByEmail: getUserByEmailStub,
+  getUser: getUserStub
 }));
 
 const myFunctions = require('../index.js');
@@ -72,7 +74,7 @@ describe('Cloud Functions', () => {
                      transactionSetStub, userDocStub, bunkDocStub, configDocStub, 
                      transactionDocStub, collectionStub, createUserStub, 
                      setCustomUserClaimsStub, isAdminStub, isManagerStub, 
-                     txGetStub, userGetStub, getUserByEmailStub, getUserDocStub];
+                     txGetStub, userGetStub, getUserByEmailStub, getUserDocStub, getUserStub];
       stubs.forEach(s => s.resetHistory());
   });
 
@@ -135,6 +137,8 @@ describe('Cloud Functions', () => {
   describe('assignManagerToBunk', () => {
     it('should assign a manager to a bunk and log the transaction if admin', async () => {
       isAdminStub.resolves(true);
+      bunkDocStub.returns({ get: () => ({ exists: true }) });
+      getUserStub.resolves({ customClaims: { manager: true } });
       const wrapped = test.wrap(myFunctions.assignManagerToBunk);
       await wrapped({ managerUid: 'manager-uid', bunkId: 'bunk-123' }, { auth: { uid: 'admin-uid' } });
       assert(userUpdateStub.calledOnceWith({ assignedBunkId: 'bunk-123' }));

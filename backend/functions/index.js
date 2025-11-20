@@ -16,3 +16,4 @@ exports.redeemPoints = pointsFunctions.redeemPoints;
 exports.setUserRole = userFunctions.setUserRole;
 exports.onUserCreate = userFunctions.onUserCreate;
 exports.updateGlobalConfig = configFunctions.updateGlobalConfig;
+exports.deleteUser = userFunctions.deleteUser;

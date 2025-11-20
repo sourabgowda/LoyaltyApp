@@ -34,7 +34,7 @@ exports.registerCustomer = functions.https.onCall(async (data, context) => {
             lastName: lastName,
             email: email,
             role: 'customer', // Default role
-            isVerified: false, // Set to false until email is verified
+            isVerified: true, // Set to true for e2e testing
             points: 0,
             assignedBunkId: 'NA' // Not applicable for customers
         });

@@ -6,11 +6,11 @@ const auth = require('./utils/auth');
 const db = admin.firestore();
 
 exports.setUserRole = functions.https.onCall(async (data, context) => {
-  const adminId = context.auth && context.auth.uid ? context.auth.uid : null;
-  if (!adminId || !(await auth.isAdmin(adminId))) {
+  if (!context.auth || !(await auth.isAdmin(context.auth.token))) {
     throw new functions.https.HttpsError('permission-denied', 'Only admins can set user roles.');
   }
 
+  const adminId = context.auth.uid;
   const { targetUid, newRole } = data;
   const allowedRoles = ['admin', 'manager', 'customer'];
 
@@ -56,5 +56,27 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
         if (userDoc.exists) {
             await userRef.update({ isVerified: true });
         }
+    }
+});
+
+exports.deleteUser = functions.https.onCall(async (data, context) => {
+    if (!context.auth || !(await auth.isAdmin(context.auth.token))) {
+        throw new functions.https.HttpsError('permission-denied', 'Only admins can delete users.');
+    }
+
+    const { email } = data;
+    if (!email) {
+        throw new functions.https.HttpsError('invalid-argument', 'Email is required.');
+    }
+
+    try {
+        const user = await admin.auth().getUserByEmail(email);
+        await admin.auth().deleteUser(user.uid);
+        return { status: 'success', message: `User ${email} deleted successfully.` };
+    } catch (error) {
+        if (error.code === 'auth/user-not-found') {
+            throw new functions.https.HttpsError('not-found', `User with email ${email} not found.`);
+        }
+        throw new functions.https.HttpsError('internal', 'Error deleting user.');
     }
 });

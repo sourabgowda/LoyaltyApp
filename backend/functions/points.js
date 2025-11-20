@@ -5,10 +5,10 @@ const auth = require('./utils/auth');
 const db = admin.firestore();
 
 exports.creditPoints = functions.https.onCall(async (data, context) => {
-  const managerId = context.auth && context.auth.uid ? context.auth.uid : null;
-  if (!managerId || !(await auth.isManager(managerId))) {
+  if (!context.auth || !(await auth.isManager(context.auth.token))) {
     throw new functions.https.HttpsError('permission-denied', 'Only managers can credit points.');
   }
+  const managerId = context.auth.uid;
   const { customerId, amountSpent } = data;
   if (managerId === customerId) {
     throw new functions.https.HttpsError('permission-denied', 'Managers cannot credit points to their own accounts.');
@@ -64,10 +64,10 @@ exports.creditPoints = functions.https.onCall(async (data, context) => {
 });
 
 exports.redeemPoints = functions.https.onCall(async (data, context) => {
-  const managerId = context.auth && context.auth.uid ? context.auth.uid : null;
-  if (!managerId || !(await auth.isManager(managerId))) {
+  if (!context.auth || !(await auth.isManager(context.auth.token))) {
     throw new functions.https.HttpsError('permission-denied', 'Only managers can redeem points.');
   }
+  const managerId = context.auth.uid;
   const { customerId, pointsToRedeem } = data;
   if (managerId === customerId) {
     throw new functions.https.HttpsError('permission-denied', 'Managers cannot redeem their own points.');

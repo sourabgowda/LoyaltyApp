@@ -8,14 +8,12 @@ async function getUserDoc(userId) {
   return doc.exists ? { ref: doc.ref, data: doc.data() } : null;
 }
 
-async function isManager(userId) {
-  const u = await getUserDoc(userId);
-  return !!u && u.data.role === 'manager';
+async function isManager(decodedToken) {
+  return !!decodedToken && decodedToken.manager;
 }
 
-async function isAdmin(userId) {
-  const u = await getUserDoc(userId);
-  return !!u && u.data.role === 'admin';
+async function isAdmin(decodedToken) {
+  return !!decodedToken && decodedToken.admin;
 }
 
 module.exports = {

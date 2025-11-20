@@ -7,10 +7,10 @@ const { isValidPincode } = require('./validation');
 const db = admin.firestore();
 
 exports.createBunk = functions.https.onCall(async (data, context) => {
-    const adminId = context.auth && context.auth.uid ? context.auth.uid : null;
-    if (!adminId || !(await auth.isAdmin(adminId))) {
+    if (!context.auth || !(await auth.isAdmin(context.auth.token))) {
         throw new functions.https.HttpsError('permission-denied', 'Only admins can create bunks.');
     }
+    const adminId = context.auth.uid;
     const { name, location, district, state, pincode } = data;
     if (!name || !location || !district || !state || !pincode) {
         throw new functions.https.HttpsError('invalid-argument', 'Bunk details are required.');
@@ -38,14 +38,36 @@ exports.createBunk = functions.https.onCall(async (data, context) => {
 });
 
 exports.assignManagerToBunk = functions.https.onCall(async (data, context) => {
-  const adminId = context.auth && context.auth.uid ? context.auth.uid : null;
-  if (!adminId || !(await auth.isAdmin(adminId))) {
+  if (!context.auth || !(await auth.isAdmin(context.auth.token))) {
     throw new functions.https.HttpsError('permission-denied', 'Only admins can assign managers to bunks.');
   }
+  const adminId = context.auth.uid;
   const { managerUid, bunkId } = data;
   if (!managerUid || !bunkId) {
     throw new functions.https.HttpsError('invalid-argument', 'A managerUid and bunkId are required.');
   }
+
+  // Check if bunk exists
+  const bunkRef = db.collection('bunks').doc(bunkId);
+  const bunkDoc = await bunkRef.get();
+  if (!bunkDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Bunk not found.');
+  }
+
+  // Check if user exists and is a manager
+  try {
+      const userRecord = await admin.auth().getUser(managerUid);
+      if (!userRecord.customClaims || !userRecord.customClaims.manager) {
+          throw new functions.https.HttpsError('invalid-argument', 'User is not a manager.');
+      }
+  } catch (error) {
+      if (error.code === 'auth/user-not-found') {
+          throw new functions.https.HttpsError('not-found', 'Manager user not found.');
+      }
+      // Re-throw other errors for debugging
+      throw error;
+  }
+  
   const managerRef = db.collection('users').doc(managerUid);
   await managerRef.update({ assignedBunkId: bunkId });
 
