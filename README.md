@@ -10,9 +10,9 @@ This is a full-stack mobile application for a fuel loyalty program, built with a
 - **Secure User Authentication:** Users register and log in using their email and password. Email verification is required to activate the account.
 - **Role-Based Access Control:** The system supports three distinct roles with specific permissions:
   - **Customer:** Can view their points and transaction history.
-  - **Manager:** Can credit and redeem points for customers at their assigned bunk.
+  - **Manager:** Can credit and redeem points for customers at their assigned bunk. A critical security fix now prevents managers from crediting or redeeming points at bunks to which they are not assigned.
   - **Admin:** Has full control to manage users, bunks, and system-wide settings.
-- **Centralized Admin Panel:** A dedicated screen for administrators to manage the entire system.
+- **Centralized Admin Panel:** A dedicated screen for administrators to manage the entire system. The global configuration now includes validation to ensure that the `creditPercentage` is always between 0 and 100.
 - **Secure & Scalable Backend:** Built on Firebase Cloud Functions and Firestore, with business logic and security enforced on the server side.
 - **Complete Audit Trail:** Immutable transaction logs are created for all point changes and configuration updates, ensuring data integrity.
 
@@ -25,7 +25,7 @@ This is a full-stack mobile application for a fuel loyalty program, built with a
   - Firebase Authentication (for user login)
   - Cloud Firestore (as the primary database)
   - Cloud Functions for Firebase (for server-side logic)
-- **Languages:** Dart, JavaScript (Node.js v18)
+- **Languages:** Dart, JavaScript (Node.js v20)
 - **Key Backend Dependencies:**
   - `firebase-admin`: For privileged backend access to the Firebase project.
   - `firebase-functions`: The SDK for writing Cloud Functions.
@@ -39,7 +39,7 @@ Follow these steps to set up and run the project locally.
 ### Prerequisites
 
 - [Flutter SDK](https://docs.flutter.dev/get-started/install)
-- [Node.js](https://nodejs.org/) (v18, as specified in `functions/package.json`)
+- [Node.js](https://nodejs.org/) (v20, as specified in `functions/package.json`)
 - [Firebase CLI](https://firebase.google.com/docs/cli)
 
 ### 1. Firebase Project Setup
@@ -81,12 +81,41 @@ The project includes a script to seed the database with necessary initial data.
 
 ---
 
+## 🧪 Testing
+
+### Unit Tests
+
+To run the backend unit tests, navigate to the `functions` directory and run:
+
+```bash
+npm test
+```
+
+### End-to-End Tests
+
+The end-to-end tests simulate real user interactions and require a configured Firebase project. The test suite now includes a specific test to verify the manager bunk security fix.
+
+1.  Navigate to the `e2e_test` directory: `cd e2e_test`
+2.  Install the dependencies: `npm install`
+3.  Run the end-to-end test suite:
+    ```bash
+    npm run e2e
+    ```
+    This command will:
+    - Create test users (admin, manager, customer).
+    - Assign custom roles.
+    - Generate authentication tokens.
+    - Run a series of automated tests against your Firebase backend.
+
+---
+
 ## 📁 Project Structure
 
 ```
 .
 ├── flutter_app/         # Contains the Flutter frontend application.
 ├── functions/           # Contains the Node.js backend Cloud Functions.
+├── e2e_test/            # End-to-end tests for the backend.
 ├── DB_SCHEMA.md         # The database schema documentation.
 ├── README_ROLES.md      # Detailed documentation of user roles.
 ├── firestore.rules      # Security rules for the Firestore database.

@@ -1,25 +1,21 @@
 # End-to-End Tests
 
-This folder contains scripts for running end-to-end tests against the deployed Firebase Functions.
+This folder contains the scripts for running automated end-to-end (E2E) tests against the Firebase Functions backend.
 
 ## Prerequisites
 
-1.  Node.js and npm installed.
-2.  Firebase CLI installed and configured.
+- Node.js and npm installed.
+- You must have a Firebase project with the functions deployed.
+- You must have a `serviceAccountKey.json` file in the `e2e_test` directory. This is required for the admin actions in the tests. You can generate this file in your Firebase project settings.
 
 ## Setup
 
-1.  **Deploy Functions:** Deploy your functions to a Firebase project:
-    ```bash
-    firebase deploy --only functions
-    ```
-
-2.  **Update Configuration:**
+1.  **Update Configuration:**
     *   Open `e2e_test/config.js`.
     *   Fill in your Firebase project's `firebaseConfig`. You can get this from the Firebase console.
     *   Fill in the `functionUrls` with the HTTP trigger URLs for your deployed functions.
 
-3.  **Install Dependencies:**
+2.  **Install Dependencies:**
     ```bash
     cd e2e_test
     npm install
@@ -27,36 +23,17 @@ This folder contains scripts for running end-to-end tests against the deployed F
 
 ## Running the Tests
 
-The tests are run in a specific sequence.
-
-### 1. Register Users
-
-This script registers the test users (admin, manager, customer).
+To run the entire E2E test suite, simply run the following command from the `e2e_test` directory:
 
 ```bash
-node setup_users.js
+npm run e2e
 ```
 
-After running this, you **MUST** manually set a custom claim on the admin user in the Firebase Console to make them an admin.
-- Go to the Authentication -> Users tab in your Firebase project.
-- Find the `admin@test.com` user.
-- Click the three dots and select "Edit user".
-- Add a custom claim with key `admin` and value `true`.
+This single command will perform all the necessary steps in the correct order:
 
-### 2. Get Authentication Tokens
+1.  **`setup_users.js`**: Registers the test users (admin, manager, customer).
+2.  **`set_custom_claims.js`**: Sets the appropriate custom claims for each test user, granting them their roles (admin, manager).
+3.  **`get_tokens.js`**: Signs in as each test user and saves their authentication tokens to `tokens.json`.
+4.  **`run_tests.js`**: Executes the actual end-to-end tests for various user roles and scenarios. This now includes a specific test to verify that managers can only interact with their assigned bunk.
 
-This script signs in as each test user and saves their auth tokens.
-
-```bash
-node get_tokens.js
-```
-
-### 3. Run the E2E Tests
-
-This script executes the actual end-to-end tests for various scenarios.
-
-```bash
-node run_tests.js
-```
-
-This will run all tests and print the results to the console.
+The results will be printed to the console. The tests are designed to be self-contained and will clean up and create the necessary test data.

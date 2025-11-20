@@ -17,8 +17,8 @@ exports.updateGlobalConfig = functions.https.onCall(async (data, context) => {
 
   // Validate creditPercentage
   if (updateData.creditPercentage !== undefined) {
-      if (typeof updateData.creditPercentage !== 'number' || updateData.creditPercentage < 0) {
-          throw new functions.https.HttpsError('invalid-argument', 'creditPercentage must be a non-negative number.');
+      if (typeof updateData.creditPercentage !== 'number' || updateData.creditPercentage < 0 || updateData.creditPercentage > 100) {
+          throw new functions.https.HttpsError('invalid-argument', 'creditPercentage must be a number between 0 and 100.');
       }
   }
   

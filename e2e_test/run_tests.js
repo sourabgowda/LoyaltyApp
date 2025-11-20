@@ -56,11 +56,12 @@ async function runTests() {
 
     await testAPI('Admin: Set Manager Role', functionUrls.setUserRole, tokens.admin, { targetUid: user_data["manager@test.com"], newRole: 'manager' });
     await testAPI('Admin: Set non-existent user role', functionUrls.setUserRole, tokens.admin, { targetUid: 'non-existent-uid', newRole: 'manager' }, 404);
-    const bunk = await testAPI('Admin: Create Bunk', functionUrls.createBunk, tokens.admin, { name: 'Test Bunk Alpha', location: 'Test Location', district: 'Test District', state: 'Test State', pincode: '111111' });
-    if (bunk) {
-        await testAPI('Admin: Assign Manager', functionUrls.assignManagerToBunk, tokens.admin, { bunkId: bunk.bunkId, managerUid: user_data["manager@test.com"] });
+    const bunkA = await testAPI('Admin: Create Bunk A', functionUrls.createBunk, tokens.admin, { name: 'Test Bunk A', location: 'Test Location', district: 'Test District', state: 'Test State', pincode: '111111' });
+    const bunkB = await testAPI('Admin: Create Bunk B', functionUrls.createBunk, tokens.admin, { name: 'Test Bunk B', location: 'Test Location', district: 'Test District', state: 'Test State', pincode: '222222' });
+    if (bunkA) {
+        await testAPI('Admin: Assign Manager to Bunk A', functionUrls.assignManagerToBunk, tokens.admin, { bunkId: bunkA.bunkId, managerUid: user_data["manager@test.com"] });
         await testAPI('Admin: Assign manager to non-existent bunk', functionUrls.assignManagerToBunk, tokens.admin, { bunkId: 'non-existent-bunk', managerUid: user_data["manager@test.com"] }, 404);
-        await testAPI('Admin: Assign non-manager to bunk', functionUrls.assignManagerToBunk, tokens.admin, { bunkId: bunk.bunkId, managerUid: user_data["customer@test.com"] }, 400);
+        await testAPI('Admin: Assign non-manager to bunk', functionUrls.assignManagerToBunk, tokens.admin, { bunkId: bunkA.bunkId, managerUid: user_data["customer@test.com"] }, 400);
     }
     await testAPI('Admin: Update Global Config', functionUrls.updateGlobalConfig, tokens.admin, { updateData: { creditPercentage: 10, redemptionRate: 1 } });
     await testAPI('Admin: Update Global Config with invalid data', functionUrls.updateGlobalConfig, tokens.admin, { updateData: { creditPercentage: 'ten' } }, 400);
@@ -71,13 +72,14 @@ async function runTests() {
 
     console.log('\n--- Starting Manager Scenarios ---\n');
     // Manager tests
-    await testAPI('Manager: Credit Points', functionUrls.creditPoints, tokens.manager, { customerId: user_data["customer@test.com"], amountSpent: 100 });
-    await testAPI('Manager: Credit points to non-existent customer', functionUrls.creditPoints, tokens.manager, { customerId: 'non-existent-uid', amountSpent: 100 }, 404);
-    await testAPI('Manager: Credit points with negative amount', functionUrls.creditPoints, tokens.manager, { customerId: user_data["customer@test.com"], amountSpent: -50 }, 400);
-    await testAPI('Manager: Redeem Points', functionUrls.redeemPoints, tokens.manager, { customerId: user_data["customer@test.com"], pointsToRedeem: 10 });
-    await testAPI('Manager: Redeem more points than available', functionUrls.redeemPoints, tokens.manager, { customerId: user_data["customer@test.com"], pointsToRedeem: 10000 }, 400);
-    await testAPI('Manager: Redeem negative points', functionUrls.redeemPoints, tokens.manager, { customerId: user_data["customer@test.com"], pointsToRedeem: -20 }, 400);
-    await testAPI('Manager: Credit Points to self', functionUrls.creditPoints, tokens.manager, { customerId: user_data["manager@test.com"], amountSpent: 100 }, 403);
+    await testAPI('Manager: Credit Points at assigned bunk (Bunk A)', functionUrls.creditPoints, tokens.manager, { bunkId: bunkA.bunkId, customerId: user_data["customer@test.com"], amountSpent: 100 });
+    await testAPI('Manager: Attempt to credit points at unassigned bunk (Bunk B)', functionUrls.creditPoints, tokens.manager, { bunkId: bunkB.bunkId, customerId: user_data["customer@test.com"], amountSpent: 100 }, 403);
+    await testAPI('Manager: Credit points to non-existent customer', functionUrls.creditPoints, tokens.manager, { bunkId: bunkA.bunkId, customerId: 'non-existent-uid', amountSpent: 100 }, 404);
+    await testAPI('Manager: Credit points with negative amount', functionUrls.creditPoints, tokens.manager, { bunkId: bunkA.bunkId, customerId: user_data["customer@test.com"], amountSpent: -50 }, 400);
+    await testAPI('Manager: Redeem Points at assigned bunk (Bunk A)', functionUrls.redeemPoints, tokens.manager, { bunkId: bunkA.bunkId, customerId: user_data["customer@test.com"], pointsToRedeem: 10 });
+    await testAPI('Manager: Redeem more points than available', functionUrls.redeemPoints, tokens.manager, { bunkId: bunkA.bunkId, customerId: user_data["customer@test.com"], pointsToRedeem: 10000 }, 400);
+    await testAPI('Manager: Redeem negative points', functionUrls.redeemPoints, tokens.manager, { bunkId: bunkA.bunkId, customerId: user_data["customer@test.com"], pointsToRedeem: -20 }, 400);
+    await testAPI('Manager: Credit Points to self', functionUrls.creditPoints, tokens.manager, { bunkId: bunkA.bunkId, customerId: user_data["manager@test.com"], amountSpent: 100 }, 403);
     await testAPI('Manager: Try to create bunk', functionUrls.createBunk, tokens.manager, { name: 'Manager Bunk', location: 'Test Location', district: 'Test District', state: 'Test State', pincode: '222222' }, 403);
     await testAPI('Manager: Try to set user role', functionUrls.setUserRole, tokens.manager, { targetUid: user_data["customer@test.com"], newRole: 'manager' }, 403);
     await testAPI('Manager: Try to update global config', functionUrls.updateGlobalConfig, tokens.manager, { updateData: { creditPercentage: 20 } }, 403);
@@ -85,19 +87,19 @@ async function runTests() {
 
     console.log('\n--- Starting Customer Scenarios ---\n');
     // Customer tests
-    await testAPI('Customer: Try to credit points', functionUrls.creditPoints, tokens.customer, { customerId: user_data["customer@test.com"], amountSpent: 100 }, 403);
-    await testAPI('Customer: Try to redeem points for self', functionUrls.redeemPoints, tokens.customer, { customerId: user_data["customer@test.com"], pointsToRedeem: 10 }, 403);
+    await testAPI('Customer: Try to credit points', functionUrls.creditPoints, tokens.customer, { bunkId: bunkA.bunkId, customerId: user_data["customer@test.com"], amountSpent: 100 }, 403);
+    await testAPI('Customer: Try to redeem points for self', functionUrls.redeemPoints, tokens.customer, { bunkId: bunkA.bunkId, customerId: user_data["customer@test.com"], pointsToRedeem: 10 }, 403);
     await testAPI('Customer: Try to create bunk', functionUrls.createBunk, tokens.customer, { name: 'Customer Bunk', location: 'Test Location', district: 'Test District', state: 'Test State', pincode: '333333' }, 403);
     await testAPI('Customer: Try to set user role', functionUrls.setUserRole, tokens.customer, { targetUid: user_data["manager@test.com"], newRole: 'admin' }, 403);
-    if (bunk) {
-        await testAPI('Customer: Try to assign manager', functionUrls.assignManagerToBunk, tokens.customer, { bunkId: bunk.bunkId, managerUid: user_data["manager@test.com"] }, 403);
+    if (bunkA) {
+        await testAPI('Customer: Try to assign manager', functionUrls.assignManagerToBunk, tokens.customer, { bunkId: bunkA.bunkId, managerUid: user_data["manager@test.com"] }, 403);
     }
     await testAPI('Customer: Try to update global config', functionUrls.updateGlobalConfig, tokens.customer, { updateData: { creditPercentage: 50 } }, 403);
 
     console.log('\n--- Starting Unauthenticated Scenarios ---\n');
     // Unauthenticated tests
     await testAPI('Unauthenticated: Try to create bunk', functionUrls.createBunk, null, { name: 'No Auth Bunk', location: 'Test Location', district: 'Test District', state: 'Test State', pincode: '444444' }, 403);
-    await testAPI('Unauthenticated: Try to credit points', functionUrls.creditPoints, null, { customerId: user_data["customer@test.com"], amountSpent: 100 }, 403);
+    await testAPI('Unauthenticated: Try to credit points', functionUrls.creditPoints, null, { bunkId: bunkA.bunkId, customerId: user_data["customer@test.com"], amountSpent: 100 }, 403);
 
     console.log('\n--- E2E Tests Complete ---\n');
 }

@@ -101,6 +101,22 @@ describe('Cloud Functions', () => {
         const wrapped = test.wrap(myFunctions.registerCustomer);
         await assert.rejects(wrapped({ firstName: 'Test', lastName: 'User', email: 'test@test.com', password: 'password' }), { code: 'already-exists' });
     });
+    it('should throw an error for a long first name', async () => {
+        const wrapped = test.wrap(myFunctions.registerCustomer);
+        await assert.rejects(wrapped({ firstName: 'a'.repeat(41), lastName: 'User', email: 'test@test.com', password: 'password' }), { code: 'invalid-argument' });
+    });
+    it('should throw an error for a first name with spaces', async () => {
+        const wrapped = test.wrap(myFunctions.registerCustomer);
+        await assert.rejects(wrapped({ firstName: 'Test User', lastName: 'User', email: 'test@test.com', password: 'password' }), { code: 'invalid-argument' });
+    });
+    it('should throw an error for a long last name', async () => {
+        const wrapped = test.wrap(myFunctions.registerCustomer);
+        await assert.rejects(wrapped({ firstName: 'Test', lastName: 'a'.repeat(81), email: 'test@test.com', password: 'password' }), { code: 'invalid-argument' });
+    });
+    it('should throw an error for a last name with too many spaces', async () => {
+        const wrapped = test.wrap(myFunctions.registerCustomer);
+        await assert.rejects(wrapped({ firstName: 'Test', lastName: 'User  With  Too  Many  Spaces', email: 'test@test.com', password: 'password' }), { code: 'invalid-argument' });
+    });
   });
 
   describe('createBunk', () => {
@@ -169,7 +185,7 @@ describe('Cloud Functions', () => {
       txGetStub.onCall(2).resolves({ exists: true, data: () => ({ creditPercentage: 10 }), ref: configDocRef });
       txGetStub.onCall(3).resolves({ exists: true, data: () => ({ name: 'Test Bunk' }), ref: bunkDocRef });
       const wrapped = test.wrap(myFunctions.creditPoints);
-      await wrapped({ customerId: 'cust-id', amountSpent: 500 }, { auth: { uid: 'manager-uid' } });
+      await wrapped({ customerId: 'cust-id', amountSpent: 500, bunkId: 'bunk-123' }, { auth: { uid: 'manager-uid' } });
       assert(userUpdateStub.calledOnceWith({ points: 150 }));
       assert(transactionSetStub.calledOnce);
       const transactionArg = transactionSetStub.firstCall.args[0];
@@ -184,26 +200,26 @@ describe('Cloud Functions', () => {
     it('should throw a permission-denied error if a manager tries to credit points to their own account', async () => {
         isManagerStub.resolves(true);
         const wrapped = test.wrap(myFunctions.creditPoints);
-        await assert.rejects(wrapped({ customerId: 'manager-uid', amountSpent: 500 }, { auth: { uid: 'manager-uid' } }), { code: 'permission-denied' });
+        await assert.rejects(wrapped({ customerId: 'manager-uid', amountSpent: 500, bunkId: 'bunk-123' }, { auth: { uid: 'manager-uid' } }), { code: 'permission-denied' });
     });
     it('should throw a not-found error if the customer does not exist', async () => {
         isManagerStub.resolves(true);
         txGetStub.onCall(0).resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }), ref: userDocRef });
         txGetStub.onCall(1).resolves({ exists: false });
         const wrapped = test.wrap(myFunctions.creditPoints);
-        await assert.rejects(wrapped({ customerId: 'cust-id', amountSpent: 500 }, { auth: { uid: 'manager-uid' } }), { code: 'not-found' });
+        await assert.rejects(wrapped({ customerId: 'cust-id', amountSpent: 500, bunkId: 'bunk-123' }, { auth: { uid: 'manager-uid' } }), { code: 'not-found' });
     });
     it('should throw an error if the customer is not verified', async () => {
         isManagerStub.resolves(true);
         txGetStub.onCall(0).resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }), ref: userDocRef });
         txGetStub.onCall(1).resolves({ exists: true, data: () => ({ isVerified: false, points: 100 }), ref: userDocRef });
         const wrapped = test.wrap(myFunctions.creditPoints);
-        await assert.rejects(wrapped({ customerId: 'cust-id', amountSpent: 500 }, { auth: { uid: 'manager-uid' } }), { code: 'failed-precondition' });
+        await assert.rejects(wrapped({ customerId: 'cust-id', amountSpent: 500, bunkId: 'bunk-123' }, { auth: { uid: 'manager-uid' } }), { code: 'failed-precondition' });
     });
     it('should throw an invalid-argument error for a non-positive amount', async () => {
         isManagerStub.resolves(true);
         const wrapped = test.wrap(myFunctions.creditPoints);
-        await assert.rejects(wrapped({ customerId: 'cust-id', amountSpent: 0 }, { auth: { uid: 'manager-uid' } }), { code: 'invalid-argument' });
+        await assert.rejects(wrapped({ customerId: 'cust-id', amountSpent: 0, bunkId: 'bunk-123' }, { auth: { uid: 'manager-uid' } }), { code: 'invalid-argument' });
     });
   });
 
@@ -215,7 +231,7 @@ describe('Cloud Functions', () => {
       txGetStub.onCall(2).resolves({ exists: true, data: () => ({ redemptionRate: 0.5 }), ref: configDocRef });
       txGetStub.onCall(3).resolves({ exists: true, data: () => ({ name: 'Test Bunk' }), ref: bunkDocRef });
       const wrapped = test.wrap(myFunctions.redeemPoints);
-      await wrapped({ customerId: 'cust-id', pointsToRedeem: 100 }, { auth: { uid: 'manager-uid' } });
+      await wrapped({ customerId: 'cust-id', pointsToRedeem: 100, bunkId: 'bunk-123' }, { auth: { uid: 'manager-uid' } });
       assert(userUpdateStub.calledOnceWith({ points: 100 }));
       assert(transactionSetStub.calledOnce);
       const transactionArg = transactionSetStub.firstCall.args[0];
@@ -230,7 +246,7 @@ describe('Cloud Functions', () => {
     it('should throw a permission-denied error if a manager tries to redeem their own points', async () => {
         isManagerStub.resolves(true);
         const wrapped = test.wrap(myFunctions.redeemPoints);
-        await assert.rejects(wrapped({ customerId: 'manager-uid', pointsToRedeem: 100 }, { auth: { uid: 'manager-uid' } }), { code: 'permission-denied' });
+        await assert.rejects(wrapped({ customerId: 'manager-uid', pointsToRedeem: 100, bunkId: 'bunk-123' }, { auth: { uid: 'manager-uid' } }), { code: 'permission-denied' });
     });
     it('should throw an error if the customer has insufficient points', async () => {
         isManagerStub.resolves(true);
@@ -238,12 +254,12 @@ describe('Cloud Functions', () => {
         txGetStub.onCall(1).resolves({ exists: true, data: () => ({ isVerified: true, points: 50 }), ref: userDocRef });
         txGetStub.onCall(2).resolves({ exists: true, data: () => ({ redemptionRate: 0.5 }), ref: configDocRef });
         const wrapped = test.wrap(myFunctions.redeemPoints);
-        await assert.rejects(wrapped({ customerId: 'cust-id', pointsToRedeem: 100 }, { auth: { uid: 'manager-uid' } }), { code: 'failed-precondition' });
+        await assert.rejects(wrapped({ customerId: 'cust-id', pointsToRedeem: 100, bunkId: 'bunk-123' }, { auth: { uid: 'manager-uid' } }), { code: 'failed-precondition' });
     });
     it('should throw an invalid-argument error for non-positive points', async () => {
         isManagerStub.resolves(true);
         const wrapped = test.wrap(myFunctions.redeemPoints);
-        await assert.rejects(wrapped({ customerId: 'cust-id', pointsToRedeem: 0 }, { auth: { uid: 'manager-uid' } }), { code: 'invalid-argument' });
+        await assert.rejects(wrapped({ customerId: 'cust-id', pointsToRedeem: 0, bunkId: 'bunk-123' }, { auth: { uid: 'manager-uid' } }), { code: 'invalid-argument' });
     });
   });
 
@@ -298,6 +314,16 @@ describe('Cloud Functions', () => {
         isAdminStub.resolves(true);
         const wrapped = test.wrap(myFunctions.updateGlobalConfig);
         await assert.rejects(wrapped({ updateData: 123 }, { auth: { uid: 'admin-uid' } }), { code: 'invalid-argument' });
+    });
+    it('should throw an error for a creditPercentage less than 0', async () => {
+        isAdminStub.resolves(true);
+        const wrapped = test.wrap(myFunctions.updateGlobalConfig);
+        await assert.rejects(wrapped({ updateData: { creditPercentage: -1 } }, { auth: { uid: 'admin-uid' } }), { code: 'invalid-argument' });
+    });
+    it('should throw an error for a creditPercentage greater than 100', async () => {
+        isAdminStub.resolves(true);
+        const wrapped = test.wrap(myFunctions.updateGlobalConfig);
+        await assert.rejects(wrapped({ updateData: { creditPercentage: 101 } }, { auth: { uid: 'admin-uid' } }), { code: 'invalid-argument' });
     });
   });
 

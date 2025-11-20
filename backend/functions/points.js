@@ -9,12 +9,12 @@ exports.creditPoints = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('permission-denied', 'Only managers can credit points.');
   }
   const managerId = context.auth.uid;
-  const { customerId, amountSpent } = data;
+  const { customerId, amountSpent, bunkId } = data;
   if (managerId === customerId) {
     throw new functions.https.HttpsError('permission-denied', 'Managers cannot credit points to their own accounts.');
   }
-  if (!customerId || !amountSpent || typeof amountSpent !== 'number' || amountSpent <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'Invalid customerId or amountSpent.');
+  if (!customerId || !amountSpent || typeof amountSpent !== 'number' || amountSpent <= 0 || !bunkId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid arguments. Required: customerId, amountSpent, bunkId.');
   }
   return db.runTransaction(async (tx) => {
     const managerSnap = await tx.get(db.collection('users').doc(managerId));
@@ -26,14 +26,14 @@ exports.creditPoints = functions.https.onCall(async (data, context) => {
     const manager = managerSnap.data();
     const customer = customerSnap.data();
     const config = configSnap.data();
-    if (!manager.assignedBunkId || manager.assignedBunkId === 'NA') {
-      throw new functions.https.HttpsError('failed-precondition', 'Manager has no assigned bunk.');
+    if (!manager.assignedBunkId || manager.assignedBunkId !== bunkId) {
+      throw new functions.https.HttpsError('permission-denied', 'Manager is not assigned to this bunk.');
     }
     if (!customer.isVerified) {
       throw new functions.https.HttpsError('failed-precondition', 'Customer not verified.');
     }
-    const bunkSnap = await tx.get(db.collection('bunks').doc(manager.assignedBunkId));
-    if (!bunkSnap.exists) throw new functions.https.HttpsError('not-found', 'Assigned bunk not found.');
+    const bunkSnap = await tx.get(db.collection('bunks').doc(bunkId));
+    if (!bunkSnap.exists) throw new functions.https.HttpsError('not-found', 'Bunk not found.');
     const bunk = bunkSnap.data();
     const creditPercentage = Number(config.creditPercentage);
     if (isNaN(creditPercentage) || creditPercentage < 0 || creditPercentage > 100) {
@@ -68,12 +68,12 @@ exports.redeemPoints = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('permission-denied', 'Only managers can redeem points.');
   }
   const managerId = context.auth.uid;
-  const { customerId, pointsToRedeem } = data;
+  const { customerId, pointsToRedeem, bunkId } = data;
   if (managerId === customerId) {
     throw new functions.https.HttpsError('permission-denied', 'Managers cannot redeem their own points.');
   }
-  if (!customerId || !pointsToRedeem || typeof pointsToRedeem !== 'number' || pointsToRedeem <= 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'Invalid customerId or pointsToRedeem.');
+  if (!customerId || !pointsToRedeem || typeof pointsToRedeem !== 'number' || pointsToRedeem <= 0 || !bunkId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid arguments. Required: customerId, pointsToRedeem, bunkId.');
   }
   return db.runTransaction(async (tx) => {
     const managerSnap = await tx.get(db.collection('users').doc(managerId));
@@ -85,17 +85,17 @@ exports.redeemPoints = functions.https.onCall(async (data, context) => {
     const manager = managerSnap.data();
     const customer = customerSnap.data();
     const config = configSnap.data();
+    if (!manager.assignedBunkId || manager.assignedBunkId !== bunkId) {
+      throw new functions.https.HttpsError('permission-denied', 'Manager is not assigned to this bunk.');
+    }
     if (!customer.isVerified) {
       throw new functions.https.HttpsError('failed-precondition', 'Customer not verified.');
     }
     if ((customer.points || 0) < pointsToRedeem) {
       throw new functions.https.HttpsError('failed-precondition', 'Insufficient points.');
     }
-    if (!manager.assignedBunkId || manager.assignedBunkId === 'NA') {
-      throw new functions.https.HttpsError('failed-precondition', 'Manager has no assigned bunk.');
-    }
-    const bunkSnap = await tx.get(db.collection('bunks').doc(manager.assignedBunkId));
-    if (!bunkSnap.exists) throw new functions.https.HttpsError('not-found', 'Assigned bunk not found.');
+    const bunkSnap = await tx.get(db.collection('bunks').doc(bunkId));
+    if (!bunkSnap.exists) throw new functions.https.HttpsError('not-found', 'Bunk not found.');
     const bunk = bunkSnap.data();
     const redemptionRate = Number(config.redemptionRate);
     if (isNaN(redemptionRate) || redemptionRate <= 0) {
