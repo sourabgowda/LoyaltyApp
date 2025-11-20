@@ -4,7 +4,6 @@ const path = require('path');
 const admin = require('firebase-admin');
 const axios = require('axios');
 const { functionUrls } = require('./config');
-const serviceAccount = require('./serviceAccountKey.json');
 
 const users = {
     admin: {
@@ -28,9 +27,7 @@ const users = {
 };
 
 // Initialize Firebase Admin SDK
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-});
+admin.initializeApp();
 
 async function deleteUsers() {
     console.log('--- Deleting existing test users ---');
