@@ -20,6 +20,20 @@ exports.createBunk = functions.https.onCall(async (data, context) => {
     }
     const bunkData = { name, location, district, state, pincode };
     const docRef = await db.collection('bunks').add(bunkData);
+
+    // Log the transaction
+    const transactionRef = db.collection('transactions').doc();
+    await transactionRef.set({
+        type: 'create_bunk',
+        initiatorId: adminId,
+        initiatorRole: 'admin',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        details: {
+            bunkId: docRef.id,
+            bunkData: bunkData
+        }
+    });
+
     return { status: 'success', message: 'Bunk created successfully.', bunkId: docRef.id };
 });
 
@@ -34,5 +48,19 @@ exports.assignManagerToBunk = functions.https.onCall(async (data, context) => {
   }
   const managerRef = db.collection('users').doc(managerUid);
   await managerRef.update({ assignedBunkId: bunkId });
+
+  // Log the transaction
+  const transactionRef = db.collection('transactions').doc();
+  await transactionRef.set({
+      type: 'assign_manager',
+      initiatorId: adminId,
+      initiatorRole: 'admin',
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      details: {
+          managerUid: managerUid,
+          bunkId: bunkId
+      }
+  });
+
   return { status: 'success', message: 'Manager assigned to bunk successfully.' };
 });

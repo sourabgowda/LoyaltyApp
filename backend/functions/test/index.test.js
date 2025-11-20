@@ -102,12 +102,16 @@ describe('Cloud Functions', () => {
   });
 
   describe('createBunk', () => {
-    it('should create a bunk if admin', async () => {
+    it('should create a bunk and log the transaction if admin', async () => {
       isAdminStub.resolves(true);
       const wrapped = test.wrap(myFunctions.createBunk);
       const bunkData = { name: 'B', location: 'L', district: 'D', state: 'S', pincode: '123456' };
       await wrapped(bunkData, { auth: { uid: 'admin-uid' } });
       assert(bunkAddStub.calledOnceWith(bunkData));
+      assert(transactionSetStub.calledOnce);
+      const transactionArg = transactionSetStub.firstCall.args[0];
+      assert.deepStrictEqual(transactionArg.type, 'create_bunk');
+      assert.deepStrictEqual(transactionArg.initiatorRole, 'admin');
     });
 
     it('should deny if not admin', async () => {
@@ -129,11 +133,15 @@ describe('Cloud Functions', () => {
   });
 
   describe('assignManagerToBunk', () => {
-    it('should assign a manager to a bunk if admin', async () => {
+    it('should assign a manager to a bunk and log the transaction if admin', async () => {
       isAdminStub.resolves(true);
       const wrapped = test.wrap(myFunctions.assignManagerToBunk);
       await wrapped({ managerUid: 'manager-uid', bunkId: 'bunk-123' }, { auth: { uid: 'admin-uid' } });
       assert(userUpdateStub.calledOnceWith({ assignedBunkId: 'bunk-123' }));
+      assert(transactionSetStub.calledOnce);
+      const transactionArg = transactionSetStub.firstCall.args[0];
+      assert.deepStrictEqual(transactionArg.type, 'assign_manager');
+      assert.deepStrictEqual(transactionArg.initiatorRole, 'admin');
     });
 
     it('should deny if not admin', async () => {
@@ -150,19 +158,19 @@ describe('Cloud Functions', () => {
   });
 
   describe('creditPoints', () => {
-    it('should credit points if manager', async () => {
+    it('should credit points and log the transaction if manager', async () => {
       isManagerStub.resolves(true);
-
       txGetStub.onCall(0).resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }), ref: userDocRef });
       txGetStub.onCall(1).resolves({ exists: true, data: () => ({ isVerified: true, points: 100 }), ref: userDocRef });
       txGetStub.onCall(2).resolves({ exists: true, data: () => ({ creditPercentage: 10 }), ref: configDocRef });
       txGetStub.onCall(3).resolves({ exists: true, data: () => ({ name: 'Test Bunk' }), ref: bunkDocRef });
-      
       const wrapped = test.wrap(myFunctions.creditPoints);
       await wrapped({ customerId: 'cust-id', amountSpent: 500 }, { auth: { uid: 'manager-uid' } });
-
       assert(userUpdateStub.calledOnceWith({ points: 150 }));
       assert(transactionSetStub.calledOnce);
+      const transactionArg = transactionSetStub.firstCall.args[0];
+      assert.deepStrictEqual(transactionArg.type, 'credit');
+      assert.deepStrictEqual(transactionArg.initiatorRole, 'manager');
     });
     it('should throw a permission-denied error if the user is not a manager', async () => {
         isManagerStub.resolves(false);
@@ -196,19 +204,19 @@ describe('Cloud Functions', () => {
   });
 
   describe('redeemPoints', () => {
-    it('should redeem points if manager', async () => {
+    it('should redeem points and log the transaction if manager', async () => {
       isManagerStub.resolves(true);
-      
       txGetStub.onCall(0).resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }), ref: userDocRef });
       txGetStub.onCall(1).resolves({ exists: true, data: () => ({ isVerified: true, points: 200 }), ref: userDocRef });
       txGetStub.onCall(2).resolves({ exists: true, data: () => ({ redemptionRate: 0.5 }), ref: configDocRef });
       txGetStub.onCall(3).resolves({ exists: true, data: () => ({ name: 'Test Bunk' }), ref: bunkDocRef });
-
       const wrapped = test.wrap(myFunctions.redeemPoints);
       await wrapped({ customerId: 'cust-id', pointsToRedeem: 100 }, { auth: { uid: 'manager-uid' } });
-
       assert(userUpdateStub.calledOnceWith({ points: 100 }));
       assert(transactionSetStub.calledOnce);
+      const transactionArg = transactionSetStub.firstCall.args[0];
+      assert.deepStrictEqual(transactionArg.type, 'redeem');
+      assert.deepStrictEqual(transactionArg.initiatorRole, 'manager');
     });
     it('should throw a permission-denied error if the user is not a manager', async () => {
         isManagerStub.resolves(false);
@@ -236,14 +244,17 @@ describe('Cloud Functions', () => {
   });
 
   describe('setUserRole', () => {
-    it('should set role if admin', async () => {
+    it('should set role and log the transaction if admin', async () => {
       isAdminStub.resolves(true);
-      getUserDocStub.resolves({data: {},
-      ref: {}}); 
+      getUserDocStub.resolves({data: {}, ref: {}}); 
       const wrapped = test.wrap(myFunctions.setUserRole);
       await wrapped({ targetUid: 'test-user-id', newRole: 'manager' }, { auth: { uid: 'admin-uid' } });
       assert(setCustomUserClaimsStub.calledOnceWith('test-user-id', { manager: true }));
       assert(userUpdateStub.calledOnceWith({ role: 'manager' }));
+      assert(transactionSetStub.calledOnce);
+      const transactionArg = transactionSetStub.firstCall.args[0];
+      assert.deepStrictEqual(transactionArg.type, 'set_user_role');
+      assert.deepStrictEqual(transactionArg.initiatorRole, 'admin');
     });
     it('should deny access if the user is not an admin', async () => {
         isAdminStub.resolves(false);
@@ -264,11 +275,15 @@ describe('Cloud Functions', () => {
   });
 
   describe('updateGlobalConfig', () => {
-    it('should update config if admin', async () => {
+    it('should update config and log the transaction if admin', async () => {
       isAdminStub.resolves(true);
       const wrapped = test.wrap(myFunctions.updateGlobalConfig);
       await wrapped({ updateData: { creditPercentage: 20 } }, { auth: { uid: 'admin-uid' } });
       assert(configSetStub.calledOnceWith({ creditPercentage: 20 }, { merge: true }));
+      assert(transactionSetStub.calledOnce);
+      const transactionArg = transactionSetStub.firstCall.args[0];
+      assert.deepStrictEqual(transactionArg.type, 'update_global_config');
+      assert.deepStrictEqual(transactionArg.initiatorRole, 'admin');
     });
     it('should deny access if the user is not an admin', async () => {
         isAdminStub.resolves(false);

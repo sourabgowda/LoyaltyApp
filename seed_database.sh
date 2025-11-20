@@ -1,106 +1,75 @@
-#!/bin/bash
-#
-# seed_database.sh
-# This script seeds the Firestore database with initial data required for the loyalty app.
-#
-# IMPORTANT:
-# 1. Make sure you are authenticated with gcloud (`gcloud auth login`).
-# 2. Set your project configuration (`gcloud config set project YOUR_PROJECT_ID`).
-# 3. You must manually create an Admin user in Firebase Authentication first.
-#    Then, replace `REPLACE_WITH_ADMIN_UID` with the UID of that user.
 
-# --- Variables ---
-# Replace this placeholder with the UID of the user you created in Firebase Authentication.
+#!/bin/bash
+
+# --- Firebase Project Configuration ---
+# Get your project ID from the Firebase console.
+PROJECT_ID="your-firebase-project-id"
 ADMIN_UID="REPLACE_WITH_ADMIN_UID"
 
-# --- Seeding Functions ---
+# --- 1. Seed Global Configuration ---
+# This sets the initial loyalty program rules.
 
-# 1. Seed the global configuration
-seed_global_config() {
-  echo "Seeding global configuration..."
-  gcloud firestore documents write "configs/global" \
-    --data-file <(cat <<EOF
-{
-  "creditPercentage": {
-    "doubleValue": 1.5
-  },
-  "pointValue": {
-    "doubleValue": 0.5
+# Firestore URL for the global config document.
+CONFIG_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/configs/global"
+
+# The configuration data.
+CONFIG_DATA='{
+  "fields": {
+    "creditPercentage": {"doubleValue": 10.0},
+    "redemptionRate": {"doubleValue": 0.5}
   }
-}
-EOF
-) || echo "Failed to seed global config."
-}
+}'
 
-# 2. Seed the initial Admin user
-seed_admin_user() {
-  if [ "$ADMIN_UID" == "REPLACE_WITH_ADMIN_UID" ]; then
-    echo "SKIPPING: Admin user seed. Please replace the placeholder UID in the script."
-    return
-  fi
-  echo "Seeding admin user with UID: $ADMIN_UID..."
-  gcloud firestore documents write "users/$ADMIN_UID" \
-    --data-file <(cat <<EOF
-{
-  "firstName": {
-    "stringValue": "Admin"
-  },
-  "lastName": {
-    "stringValue": "User"
-  },
-  "phoneNumber": {
-    "stringValue": "0000000000"
-  },
-  "role": {
-    "stringValue": "admin"
-  },
-  "isVerified": {
-    "booleanValue": true
-  },
-  "points": {
-    "integerValue": 0
-  },
-  "assignedBunkId": {
-    "stringValue": "NA"
+echo "Seeding global configuration..."
+
+# Use curl to send a PATCH request to create/update the document.
+curl -X PATCH "${CONFIG_URL}" \
+     -H "Content-Type: application/json" \
+     -d "${CONFIG_DATA}"
+
+
+# --- 2. Seed a Sample Bunk ---
+# This creates an initial bunk for managers to be assigned to.
+
+# Firestore URL for the bunks collection.
+BUNKS_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/bunks"
+
+# The sample bunk data.
+BUNK_DATA='{
+  "fields": {
+    "name": {"stringValue": "Main Street Fuel"},
+    "location": {"stringValue": "123 Main Street"},
+    "district": {"stringValue": "Central District"},
+    "state": {"stringValue": "Some State"},
+    "pincode": {"stringValue": "123456"}
   }
-}
-EOF
-) || echo "Failed to seed admin user."
-}
+}'
 
-# 3. Seed some example bunks
-seed_bunks() {
-  echo "Seeding example bunks..."
-  gcloud firestore documents write "bunks/bunk_01" \
-    --data-file <(cat <<EOF
-{
-  "name": {"stringValue": "City Fuel Stop"},
-  "location": {"stringValue": "123 Main Street"},
-  "district": {"stringValue": "Metro"},
-  "state": {"stringValue": "Stateville"},
-  "pincode": {"stringValue": "123456"}
-}
-EOF
-) || echo "Failed to seed bunk_01."
+echo "\n\nSeeding sample bunk..."
 
-  gcloud firestore documents write "bunks/bunk_02" \
-    --data-file <(cat <<EOF
-{
-  "name": {"stringValue": "Highway Gas & Go"},
-  "location": {"stringValue": "Route 66"},
-  "district": {"stringValue": "County"},
-  "state": {"stringValue": "Stateville"},
-  "pincode": {"stringValue": "789012"}
-}
-EOF
-) || echo "Failed to seed bunk_02."
-}
+curl -X POST "${BUNKS_URL}" \
+     -H "Content-Type: application/json" \
+     -d "${BUNK_DATA}"
 
-# --- Main Execution ---
-seed_global_config
-seed_admin_user
-seed_bunks
 
-echo "
-Database seeding complete."
+# --- 3. Set the Admin User Role ---
+# This gives the specified user admin privileges.
 
+# Firestore URL for the admin user's document.
+USER_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${ADMIN_UID}"
+
+# The role update data.
+USER_DATA='{
+  "fields": {
+    "role": {"stringValue": "admin"}
+  }
+}'
+
+echo "\n\nSetting admin role..."
+
+# Use curl to update the user's role.
+curl -X PATCH "${USER_URL}" \
+     -H "Content-Type: application/json" \
+     -d "${USER_DATA}"
+
+echo "\n\nDatabase seeding complete!"

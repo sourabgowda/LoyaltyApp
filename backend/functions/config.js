@@ -16,5 +16,18 @@ exports.updateGlobalConfig = functions.https.onCall(async (data, context) => {
   }
   const configRef = db.collection('configs').doc('global');
   await configRef.set(updateData, { merge: true }); // Use set with merge to create if not exists
+
+  // Log the transaction
+  const transactionRef = db.collection('transactions').doc();
+  await transactionRef.set({
+      type: 'update_global_config',
+      initiatorId: adminId,
+      initiatorRole: 'admin',
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      details: {
+          updateData: updateData
+      }
+  });
+
   return { status: 'success', message: 'Global configuration updated.' };
 });

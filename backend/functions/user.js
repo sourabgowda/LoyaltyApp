@@ -33,6 +33,19 @@ exports.setUserRole = functions.https.onCall(async (data, context) => {
   const userRef = db.collection('users').doc(targetUid);
   await userRef.update({ role: newRole });
 
+  // Log the transaction
+  const transactionRef = db.collection('transactions').doc();
+  await transactionRef.set({
+      type: 'set_user_role',
+      initiatorId: adminId,
+      initiatorRole: 'admin',
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      details: {
+          targetUid: targetUid,
+          newRole: newRole
+      }
+  });
+
   return { status: 'success', message: `User role updated to ${newRole}.` };
 });
 

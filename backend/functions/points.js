@@ -48,13 +48,16 @@ exports.creditPoints = functions.https.onCall(async (data, context) => {
     tx.update(customerSnap.ref, { points: newPoints });
     const txnRef = db.collection('transactions').doc();
     tx.set(txnRef, {
-      type: 'credit',
-      customerId,
-      managerId,
-      amountSpent,
-      pointsChange: pointsToAdd,
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      bunk: { name: bunk.name, location: bunk.location, district: bunk.district, state: bunk.state, pincode: bunk.pincode }
+        type: 'credit',
+        initiatorId: managerId,
+        initiatorRole: 'manager',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        details: {
+            customerId: customerId,
+            amountSpent: amountSpent,
+            pointsChange: pointsToAdd,
+            bunk: { name: bunk.name, location: bunk.location, district: bunk.district, state: bunk.state, pincode: bunk.pincode }
+        }
     });
     return { status: 'success', message: 'Points credited successfully.', newPoints, pointsAdded: pointsToAdd };
   });
@@ -103,13 +106,16 @@ exports.redeemPoints = functions.https.onCall(async (data, context) => {
     tx.update(customerSnap.ref, { points: newPoints });
     const txnRef = db.collection('transactions').doc();
     tx.set(txnRef, {
-      type: 'redeem',
-      customerId,
-      managerId,
-      pointsChange: -pointsToRedeem,
-      redeemedValue,
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      bunk: { name: bunk.name, location: bunk.location, district: bunk.district, state: bunk.state, pincode: bunk.pincode }
+        type: 'redeem',
+        initiatorId: managerId,
+        initiatorRole: 'manager',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        details: {
+            customerId: customerId,
+            pointsChange: -pointsToRedeem,
+            redeemedValue: redeemedValue,
+            bunk: { name: bunk.name, location: bunk.location, district: bunk.district, state: bunk.state, pincode: bunk.pincode }
+        }
     });
     return { status: 'success', message: 'Points redeemed successfully.', newPoints, redeemedValue };
   });
