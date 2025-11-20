@@ -6,24 +6,24 @@ This folder contains the scripts for running automated end-to-end (E2E) tests ag
 
 - Node.js and npm installed.
 - You must have a Firebase project with the functions deployed.
-- You must have a `serviceAccountKey.json` file in the `e2e_test` directory. This is required for the admin actions in the tests. You can generate this file in your Firebase project settings.
+- You must have a `serviceAccountKey.json` file in the `backend/e2e_test` directory. This is required for the admin actions in the tests. You can generate this file in your Firebase project settings.
 
 ## Setup
 
 1.  **Update Configuration:**
-    *   Open `e2e_test/config.js`.
+    *   Open `backend/e2e_test/config.js`.
     *   Fill in your Firebase project's `firebaseConfig`. You can get this from the Firebase console.
     *   Fill in the `functionUrls` with the HTTP trigger URLs for your deployed functions.
 
 2.  **Install Dependencies:**
     ```bash
-    cd e2e_test
+    cd backend/e2e_test
     npm install
     ```
 
 ## Running the Tests
 
-To run the entire E2E test suite, simply run the following command from the `e2e_test` directory:
+To run the entire E2E test suite, simply run the following command from the `backend/e2e_test` directory:
 
 ```bash
 npm run e2e
