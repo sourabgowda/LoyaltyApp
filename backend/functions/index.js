@@ -1,18 +1,32 @@
 
+const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const express = require('express');
+const cors = require('cors');
+
 admin.initializeApp();
 
-const customerFunctions = require('./customer');
-const bunkFunctions = require('./bunk');
-const pointsFunctions = require('./points');
-const userFunctions = require('./user');
-const configFunctions = require('./config');
+const app = express();
+app.use(cors({ origin: true }));
 
-exports.registerCustomer = customerFunctions.registerCustomer;
-exports.createBunk = bunkFunctions.createBunk;
-exports.assignManagerToBunk = bunkFunctions.assignManagerToBunk;
-exports.creditPoints = pointsFunctions.creditPoints;
-exports.redeemPoints = pointsFunctions.redeemPoints;
-exports.setUserRole = userFunctions.setUserRole;
-exports.onUserCreate = userFunctions.onUserCreate;
-exports.updateGlobalConfig = configFunctions.updateGlobalConfig;
+// Import functions from their respective files
+const { registerCustomer } = require('./customer');
+const { createBunk, assignManagerToBunk } = require('./bunk');
+const { creditPoints, redeemPoints } = require('./points');
+const { setUserRole, onUserCreate } = require('./user');
+const { updateGlobalConfig } = require('./config');
+
+// Define API routes
+app.post('/registerCustomer', registerCustomer);
+app.post('/createBunk', createBunk);
+app.post('/assignManagerToBunk', assignManagerToBunk);
+app.post('/creditPoints', creditPoints);
+app.post('/redeemPoints', redeemPoints);
+app.post('/setUserRole', setUserRole);
+app.post('/updateGlobalConfig', updateGlobalConfig);
+
+// Expose the Express API as a single Cloud Function
+exports.api = functions.https.onRequest(app);
+
+// Export other functions, like database triggers
+exports.onUserCreate = onUserCreate;

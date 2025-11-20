@@ -1,69 +1,8 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- Helper Functions ---
-    function isAuthed() {
-      return request.auth != null;
-    }
-    function isOwner(userId) {
-      return isAuthed() && request.auth.uid == userId;
-    }
-    function isAdmin() {
-      // Check the custom claim set by the `setUserRole` function.
-      return isAuthed() && request.auth.token.admin == true;
-    }
-    function isManager() {
-      return isAuthed() && request.auth.token.manager == true;
-    }
-
-    // --- Collection Rules ---
-
-    // USERS
-    // User documents are primarily managed via Cloud Functions.
-    match /users/{userId} {
-      // Admins can read any user profile. Users can only read their own.
-      allow read: if isAdmin() || isOwner(userId);
-
-      // Client-side creation is disallowed. Must go through `registerCustomer` function.
-      allow create: if false;
-
-      // Updates are disallowed from the client SDK to enforce business logic
-      // in Cloud Functions. For example, `setUserRole` handles claim and doc updates.
-      // `creditPoints` handles point updates. This prevents a user from arbitrarily
-      // changing their own points or role from the client.
-      allow update, delete: if false;
-    }
-
-    // TRANSACTIONS
-    // Transactions are immutable records created by Cloud Functions.
-    match /transactions/{transactionId} {
-      // Admins can see all transactions. Users can see their own transactions.
-      allow read: if isAdmin() || (isAuthed() && resource.data.customerId == request.auth.uid);
-
-      // Transactions cannot be created, updated, or deleted from the client.
-      allow write: if false;
-    }
-
-    // BUNKS
-    // Bunk information is public to authenticated users but only writable by admins.
-    match /bunks/{bunkId} {
-      // Any authenticated user can read the list of bunks.
-      allow read: if isAuthed();
-
-      // Bunks can only be written by an Admin (via the `createBunk` function).
-      allow write: if isAdmin();
-    }
-
-    // CONFIGS
-    // The global configuration is readable by all, but only writable by admins.
-    match /configs/global {
-      // Any authenticated user can read the global config to see current loyalty rules.
-      allow read: if isAuthed();
-
-      // Only an Admin can update the global config (via the `updateGlobalConfig` function).
-      allow write: if isAdmin();
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }

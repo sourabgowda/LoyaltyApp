@@ -1,10 +1,8 @@
-
 #!/bin/bash
 
 # --- Firebase Project Configuration ---
-# Get your project ID from the Firebase console.
-PROJECT_ID="your-firebase-project-id"
-ADMIN_UID="REPLACE_WITH_ADMIN_UID"
+PROJECT_ID="loyalty-first"
+ADMIN_UID="az4J34h7WChI64mqrur99Qg6jeq1"
 
 # --- 1. Seed Global Configuration ---
 # This sets the initial loyalty program rules.
@@ -16,7 +14,7 @@ CONFIG_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases
 CONFIG_DATA='{
   "fields": {
     "creditPercentage": {"doubleValue": 10.0},
-    "redemptionRate": {"doubleValue": 0.5}
+    "redemptionRate": {"doubleValue": 0.1}
   }
 }'
 

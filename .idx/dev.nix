@@ -47,8 +47,8 @@
       };
       # Runs when the workspace is (re)started
       onStart = {
-        # Example: start a background task to watch and re-build backend code
-        # watch-backend = "npm run watch-backend";
+        # Start the Firebase emulators in the background
+        start-emulators = "firebase emulators:start --only auth,functions,firestore";
       };
     };
   };
