@@ -15,7 +15,16 @@ const functionUrls = {
     updateGlobalConfig: "https://us-central1-loyalty-first.cloudfunctions.net/updateGlobalConfig",
     creditPoints: "https://us-central1-loyalty-first.cloudfunctions.net/creditPoints",
     redeemPoints: "https://us-central1-loyalty-first.cloudfunctions.net/redeemPoints",
-    deleteUser: "https://us-central1-loyalty-first.cloudfunctions.net/deleteUser"
+    deleteUser: "https://us-central1-loyalty-first.cloudfunctions.net/deleteUser",
+    deleteBunk: "https://us-central1-loyalty-first.cloudfunctions.net/deleteBunk",
+    unassignManagerFromBunk: "https://us-central1-loyalty-first.cloudfunctions.net/unassignManagerFromBunk",
+    getAllBunks: "https://us-central1-loyalty-first.cloudfunctions.net/getAllBunks",
+    getAllTransactions: "https://us-central1-loyalty-first.cloudfunctions.net/getAllTransactions",
+    updateUserProfile: "https://us-central1-loyalty-first.cloudfunctions.net/updateUserProfile",
+    getAssignedBunk: "https://us-central1-loyalty-first.cloudfunctions.net/getAssignedBunk",
+    getCustomerProfile: "https://us-central1-loyalty-first.cloudfunctions.net/getCustomerProfile",
+    getCustomerTransactions: "https://us-central1-loyalty-first.cloudfunctions.net/getCustomerTransactions",
+    getManagerTransactions: "https://us-central1-loyalty-first.cloudfunctions.net/getManagerTransactions"
 };
 
 module.exports = { firebaseConfig, functionUrls };

@@ -141,3 +141,43 @@ exports.unassignManagerFromBunk = functions.https.onCall(async (data, context) =
 
     return { status: 'success', message: 'Manager unassigned from bunk successfully.' };
 });
+
+exports.deleteBunk = functions.https.onCall(async (data, context) => {
+    if (!context.auth || !(await auth.isAdmin(context.auth.token))) {
+        throw new functions.https.HttpsError('permission-denied', 'Only admins can delete bunks.');
+    }
+    const adminId = context.auth.uid;
+    const { bunkId } = data;
+    if (!bunkId) {
+        throw new functions.https.HttpsError('invalid-argument', 'A bunkId is required.');
+    }
+
+    const bunkRef = db.collection('bunks').doc(bunkId);
+    const bunkDoc = await bunkRef.get();
+    if (!bunkDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Bunk not found.');
+    }
+
+    // Unassign any managers from the bunk
+    const managerIds = bunkDoc.data().managerIds || [];
+    for (const managerId of managerIds) {
+        const managerRef = db.collection('users').doc(managerId);
+        await managerRef.update({ assignedBunkId: null });
+    }
+
+    await bunkRef.delete();
+
+    // Log the transaction
+    const transactionRef = db.collection('transactions').doc();
+    await transactionRef.set({
+        type: 'delete_bunk',
+        initiatorId: adminId,
+        initiatorRole: 'admin',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        details: {
+            bunkId: bunkId,
+        }
+    });
+
+    return { status: 'success', message: 'Bunk deleted successfully.' };
+});

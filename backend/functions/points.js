@@ -53,7 +53,7 @@ exports.creditPoints = functions.https.onCall(async (data, context) => {
         initiatorRole: 'manager',
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
         details: {
-            customerId: customerId,
+            targetUid: customerId,
             amountSpent: amountSpent,
             pointsChange: pointsToAdd,
             bunk: { name: bunk.name, location: bunk.location, district: bunk.district, state: bunk.state, pincode: bunk.pincode }
@@ -111,7 +111,7 @@ exports.redeemPoints = functions.https.onCall(async (data, context) => {
         initiatorRole: 'manager',
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
         details: {
-            customerId: customerId,
+            targetUid: customerId,
             pointsChange: -pointsToRedeem,
             redeemedValue: redeemedValue,
             bunk: { name: bunk.name, location: bunk.location, district: bunk.district, state: bunk.state, pincode: bunk.pincode }

@@ -15,8 +15,9 @@ describe('Bunk Functions', () => {
 
         docStub = {
             update: sinon.stub().resolves(),
-            get: sinon.stub().resolves({ exists: true }),
+            get: sinon.stub().resolves({ exists: true, data: () => ({ managerIds: ['manager1', 'manager2'] }) }),
             set: sinon.stub().resolves(),
+            delete: sinon.stub().resolves(),
         };
         const collectionStub = sinon.stub().returns({ 
             doc: sinon.stub().returns(docStub),
@@ -180,6 +181,37 @@ describe('Bunk Functions', () => {
             const result = await wrapped({ managerUid: 'manager-uid', bunkId: 'bunk-id' }, { auth: { uid: 'admin-uid' } });
 
             assert.deepStrictEqual(result, { status: 'success', message: 'Manager unassigned from bunk successfully.' });
+        });
+    });
+
+    describe('deleteBunk', () => {
+        it('should deny access if user is not an admin', async () => {
+            authUtilStub.isAdmin.resolves(false);
+            const wrapped = test.wrap(bunkFunctions.deleteBunk);
+            await assert.rejects(() => wrapped({ bunkId: 'bunk-id' }, { auth: { uid: 'some-uid' } }), new Error('Only admins can delete bunks.'));
+        });
+
+        it('should throw an error for a missing bunkId', async () => {
+            authUtilStub.isAdmin.resolves(true);
+            const wrapped = test.wrap(bunkFunctions.deleteBunk);
+            await assert.rejects(() => wrapped({}, { auth: { uid: 'admin-uid' } }), new Error('A bunkId is required.'));
+        });
+
+        it('should throw an error if bunk not found', async () => {
+            authUtilStub.isAdmin.resolves(true);
+            docStub.get.resolves({ exists: false });
+            const wrapped = test.wrap(bunkFunctions.deleteBunk);
+            await assert.rejects(() => wrapped({ bunkId: 'bunk-id' }, { auth: { uid: 'admin-uid' } }), new Error('Bunk not found.'));
+        });
+
+        it('should delete a bunk and unassign managers successfully', async () => {
+            authUtilStub.isAdmin.resolves(true);
+            const wrapped = test.wrap(bunkFunctions.deleteBunk);
+            const result = await wrapped({ bunkId: 'bunk-id' }, { auth: { uid: 'admin-uid' } });
+
+            assert.deepStrictEqual(result, { status: 'success', message: 'Bunk deleted successfully.' });
+            assert(docStub.delete.calledOnce, 'Bunk should be deleted');
+            assert.equal(docStub.update.callCount, 2, 'Expected manager updates');
         });
     });
 });
