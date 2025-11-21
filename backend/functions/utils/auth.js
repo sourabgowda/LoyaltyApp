@@ -9,11 +9,11 @@ async function getUserDoc(userId) {
 }
 
 async function isManager(decodedToken) {
-  return !!decodedToken && decodedToken.manager;
+  return !!(decodedToken && decodedToken.manager);
 }
 
 async function isAdmin(decodedToken) {
-  return !!decodedToken && decodedToken.admin;
+  return !!(decodedToken && decodedToken.admin);
 }
 
 module.exports = {

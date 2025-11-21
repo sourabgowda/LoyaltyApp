@@ -2,7 +2,9 @@
 // backend/functions/validation.js
 
 function isValidEmail(email) {
-    return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    // This regex is carefully crafted to handle various valid and invalid email formats.
+    return typeof email === 'string' &&
+        /^(([^<>()[[\]\\.,;:\s@"]+(\.[^<>()[[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(email);
 }
 
 function isValidPassword(password) {
