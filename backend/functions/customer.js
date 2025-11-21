@@ -3,6 +3,8 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const { isValidFirstName, isValidLastName, isValidEmail, isValidPassword } = require('./validation');
 
+const db = admin.firestore();
+
 exports.registerCustomer = functions.https.onCall(async (data, context) => {
     const { firstName, lastName, email, password } = data;
 
@@ -29,7 +31,7 @@ exports.registerCustomer = functions.https.onCall(async (data, context) => {
             displayName: `${firstName} ${lastName}`
         });
 
-        await admin.firestore().collection('users').doc(userRecord.uid).set({
+        await db.collection('users').doc(userRecord.uid).set({
             firstName: firstName,
             lastName: lastName,
             email: email,
@@ -47,4 +49,37 @@ exports.registerCustomer = functions.https.onCall(async (data, context) => {
         }
         throw new functions.https.HttpsError('internal', 'An unexpected error occurred.');
     }
+});
+
+exports.getCustomerProfile = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to view your profile.');
+    }
+
+    const customerUid = context.auth.uid;
+    const userRef = db.collection('users').doc(customerUid);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Your user profile was not found.');
+    }
+
+    return { status: 'success', profile: userDoc.data() };
+});
+
+exports.getCustomerTransactions = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to view your transactions.');
+    }
+
+    const customerUid = context.auth.uid;
+
+    const transactionsSnapshot = await db.collection('transactions')
+        .where('details.targetUid', '==', customerUid)
+        .orderBy('timestamp', 'desc')
+        .get();
+
+    const transactions = transactionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    return { status: 'success', transactions };
 });

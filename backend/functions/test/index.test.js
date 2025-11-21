@@ -9,6 +9,7 @@ sinon.stub(admin, 'initializeApp');
 const userSetStub = sinon.stub().resolves();
 const userUpdateStub = sinon.stub().resolves();
 const bunkAddStub = sinon.stub().resolves({ id: 'new-bunk-123' });
+const bunkUpdateStub = sinon.stub().resolves();
 const configSetStub = sinon.stub().resolves();
 const transactionSetStub = sinon.stub().resolves();
 
@@ -16,7 +17,7 @@ const txGetStub = sinon.stub();
 const userGetStub = sinon.stub();
 
 const userDocRef = { set: userSetStub, update: userUpdateStub, get: userGetStub, path: 'users/test-user' };
-const bunkDocRef = { get: txGetStub }; 
+const bunkDocRef = { get: txGetStub, update: bunkUpdateStub }; 
 const configDocRef = { set: configSetStub, get: txGetStub };
 const transactionDocRef = { set: transactionSetStub };
 
@@ -43,7 +44,11 @@ sinon.stub(admin, 'firestore').get(() => {
             return await updateFunction(tx);
         }
     });
-    firestore.FieldValue = { serverTimestamp: () => 'SERVER_TIMESTAMP' };
+    firestore.FieldValue = {
+      serverTimestamp: () => 'SERVER_TIMESTAMP',
+      arrayUnion: (arg) => `ARRAY_UNION:${arg}`,
+      arrayRemove: (arg) => `ARRAY_REMOVE:${arg}`
+    };
     return firestore;
 });
 
@@ -70,7 +75,7 @@ describe('Cloud Functions', () => {
   after(() => { sinon.restore(); test.cleanup(); });
 
   beforeEach(() => {
-      const stubs = [userSetStub, userUpdateStub, bunkAddStub, configSetStub, 
+      const stubs = [userSetStub, userUpdateStub, bunkAddStub, bunkUpdateStub, configSetStub, 
                      transactionSetStub, userDocStub, bunkDocStub, configDocStub, 
                      transactionDocStub, collectionStub, createUserStub, 
                      setCustomUserClaimsStub, isAdminStub, isManagerStub, 
@@ -125,7 +130,7 @@ describe('Cloud Functions', () => {
       const wrapped = test.wrap(myFunctions.createBunk);
       const bunkData = { name: 'B', location: 'L', district: 'D', state: 'S', pincode: '123456' };
       await wrapped(bunkData, { auth: { uid: 'admin-uid' } });
-      assert(bunkAddStub.calledOnceWith(bunkData));
+      assert(bunkAddStub.calledOnceWith({ ...bunkData, managerIds: [] }));
       assert(transactionSetStub.calledOnce);
       const transactionArg = transactionSetStub.firstCall.args[0];
       assert.deepStrictEqual(transactionArg.type, 'create_bunk');
@@ -153,11 +158,12 @@ describe('Cloud Functions', () => {
   describe('assignManagerToBunk', () => {
     it('should assign a manager to a bunk and log the transaction if admin', async () => {
       isAdminStub.resolves(true);
-      bunkDocStub.returns({ get: () => ({ exists: true }) });
+      bunkDocStub.returns({ get: () => ({ exists: true }), update: bunkUpdateStub });
       getUserStub.resolves({ customClaims: { manager: true } });
       const wrapped = test.wrap(myFunctions.assignManagerToBunk);
       await wrapped({ managerUid: 'manager-uid', bunkId: 'bunk-123' }, { auth: { uid: 'admin-uid' } });
       assert(userUpdateStub.calledOnceWith({ assignedBunkId: 'bunk-123' }));
+      assert(bunkUpdateStub.calledOnceWith({ managerIds: 'ARRAY_UNION:manager-uid' }));
       assert(transactionSetStub.calledOnce);
       const transactionArg = transactionSetStub.firstCall.args[0];
       assert.deepStrictEqual(transactionArg.type, 'assign_manager');
@@ -266,7 +272,7 @@ describe('Cloud Functions', () => {
   describe('setUserRole', () => {
     it('should set role and log the transaction if admin', async () => {
       isAdminStub.resolves(true);
-      getUserDocStub.resolves({data: {}, ref: {}}); 
+      getUserDocStub.resolves({data: {}, ref: {}});
       const wrapped = test.wrap(myFunctions.setUserRole);
       await wrapped({ targetUid: 'test-user-id', newRole: 'manager' }, { auth: { uid: 'admin-uid' } });
       assert(setCustomUserClaimsStub.calledOnceWith('test-user-id', { manager: true }));

@@ -2,6 +2,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const auth = require('./utils/auth');
+const { isValidFirstName, isValidLastName } = require('./validation');
 
 const db = admin.firestore();
 
@@ -79,4 +80,59 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
         }
         throw new functions.https.HttpsError('internal', 'Error deleting user.');
     }
+});
+
+exports.updateUserProfile = functions.https.onCall(async (data, context) => {
+    if (!context.auth || !(await auth.isAdmin(context.auth.token))) {
+        throw new functions.https.HttpsError('permission-denied', 'Only admins can update user profiles.');
+    }
+
+    const adminId = context.auth.uid;
+    const { targetUid, firstName, lastName } = data;
+
+    if (!targetUid) {
+        throw new functions.https.HttpsError('invalid-argument', 'A targetUid is required.');
+    }
+
+    const user = await auth.getUserDoc(targetUid);
+    if (!user) {
+        throw new functions.https.HttpsError('not-found', 'The target user does not exist.');
+    }
+
+    const updateData = {};
+    if (firstName) {
+        if (!isValidFirstName(firstName)) {
+            throw new functions.https.HttpsError('invalid-argument', 'Invalid first name.');
+        }
+        updateData.firstName = firstName;
+    }
+
+    if (lastName) {
+        if (!isValidLastName(lastName)) {
+            throw new functions.https.HttpsError('invalid-argument', 'Invalid last name.');
+        }
+        updateData.lastName = lastName;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'At least one field to update must be provided.');
+    }
+
+    const userRef = db.collection('users').doc(targetUid);
+    await userRef.update(updateData);
+
+    // Log the transaction
+    const transactionRef = db.collection('transactions').doc();
+    await transactionRef.set({
+        type: 'update_user_profile',
+        initiatorId: adminId,
+        initiatorRole: 'admin',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        details: {
+            targetUid: targetUid,
+            updatedFields: updateData
+        }
+    });
+
+    return { status: 'success', message: 'User profile updated successfully.' };
 });
