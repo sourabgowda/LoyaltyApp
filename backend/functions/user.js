@@ -56,6 +56,19 @@ exports.onUserCreate = functions.auth.user().onCreate(async (user) => {
         const userDoc = await userRef.get();
         if (userDoc.exists) {
             await userRef.update({ isVerified: true });
+
+            // Log the transaction
+            const transactionRef = db.collection('transactions').doc();
+            await transactionRef.set({
+                type: 'auto_verify_user_on_create',
+                initiatorId: 'system',
+                initiatorRole: 'system',
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                details: {
+                    verifiedUid: user.uid,
+                    verifiedEmail: user.email
+                }
+            });
         }
     }
 });

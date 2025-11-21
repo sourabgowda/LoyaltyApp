@@ -38,8 +38,8 @@ This collection contains a single document with the ID \`global\`.
 
 | Field         | Type      | Description                                                                                                                                            |
 |---------------|-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
-| \`type\`        | string    | The type of transaction (e.g., \`credit\`, \`redeem\`, \`create_bunk\`, \`assign_manager\`, \`set_role\`, \`update_config\`).                                         |
+| \`type\`        | string    | The type of transaction (e.g., \`credit\`, \`redeem\`, \`create_bunk\`, \`assign_manager\`, \`set_role\`, \`update_config\`, \`create_user\`).                                         |
 | \`initiatorId\` | string    | The UID of the user who initiated the transaction.                                                                                                     |
 | \`initiatorRole\`| string    | The role of the user who initiated the transaction.                                                                                                    |
 | \`timestamp\`   | timestamp | The server-side timestamp of when the transaction was recorded.                                                                                        |
-| \`details\`     | map       | A map containing transaction-specific details. For example, a \`credit\` transaction would include the customer's UID, the amount, and the points credited. |
+| \`details\`     | map       | A map containing transaction-specific details. For example, a \`credit\` transaction would include the customer's UID, the amount, and the points credited. A \`create_user\` transaction would include the new user's UID. |

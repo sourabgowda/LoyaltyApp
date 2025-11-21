@@ -14,7 +14,7 @@ This is the backend for a fuel loyalty program, built on Firebase. It provides a
   - **Admin:** Has full control to manage users, bunks, and system-wide settings.
 - **Centralized Admin Panel:** Endpoints for administrators to manage the entire system. The global configuration includes validation to ensure that the `creditPercentage` is always between 0 and 100.
 - **Secure & Scalable Backend:** Built on Firebase Cloud Functions and Firestore, with business logic and security enforced on the server side.
-- **Complete Audit Trail:** Immutable transaction logs are created for all point changes and configuration updates, ensuring data integrity.
+- **Complete Audit Trail:** Immutable transaction logs are created for all point changes, configuration updates and user creation, ensuring data integrity.
 
 ---
 

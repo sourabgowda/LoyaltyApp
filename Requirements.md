@@ -37,4 +37,4 @@ This document outlines the functional requirements and validation boundaries for
 *   **System Configuration:** The admin can set global loyalty rules with the following constraints:
     *   **`creditPercentage`:** Must be a number between 0 and 100 (inclusive).
     *   **`redemptionRate`:** Must be a positive number.
-*   **Reporting & History:** The admin dashboard provides comprehensive statistics and a complete audit trail of all transactions and configuration changes. All configuration changes are logged in the `transactions` collection.
+*   **Reporting & History:** The admin dashboard provides comprehensive statistics and a complete audit trail of all transactions. All significant system events, such as user registration, role changes, bunk creation, and configuration updates, are logged in the `transactions` collection for auditing purposes.

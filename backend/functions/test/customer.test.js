@@ -24,7 +24,9 @@ describe('Customer Functions', () => {
             get: sinon.stub(),
         };
 
-        const collectionStub = sinon.stub().returns({ 
+        const collectionStub = sinon.stub();
+        collectionStub.withArgs('users').returns({ doc: sinon.stub().returns(docStub) });
+        collectionStub.withArgs('transactions').returns({ 
             doc: sinon.stub().returns(docStub),
             where: sinon.stub().returns({ 
                 orderBy: sinon.stub().returns({ 
@@ -40,6 +42,8 @@ describe('Customer Functions', () => {
             firestore: () => firestoreServiceStub,
             initializeApp: sinon.stub(),
         };
+        adminStub.firestore.FieldValue = { serverTimestamp: sinon.stub() };
+
 
         customerFunctions = proxyquire('../customer', {
             'firebase-admin': adminStub,
@@ -55,20 +59,20 @@ describe('Customer Functions', () => {
     describe('registerCustomer', () => {
         it('should throw an error for missing required fields', async () => {
             const wrapped = test.wrap(customerFunctions.registerCustomer);
-            await assert.rejects(() => wrapped({}), new Error('Missing required fields.'));
+            await assert.rejects(async () => await wrapped({}), new Error('Missing required fields.'));
         });
 
         it('should throw an error for an invalid first name', async () => {
             validationStub.isValidFirstName.returns(false);
             const wrapped = test.wrap(customerFunctions.registerCustomer);
-            await assert.rejects(() => wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123456' }), new Error('First name must be 1-40 characters long and contain no spaces.'));
+            await assert.rejects(async () => await wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123456' }), new Error('First name must be 1-40 characters long and contain no spaces.'));
         });
 
         it('should throw an error for an invalid last name', async () => {
             validationStub.isValidFirstName.returns(true);
             validationStub.isValidLastName.returns(false);
             const wrapped = test.wrap(customerFunctions.registerCustomer);
-            await assert.rejects(() => wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123456' }), new Error('Last name must be 1-80 characters long and can have up to two spaces.'));
+            await assert.rejects(async () => await wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123456' }), new Error('Last name must be 1-80 characters long and can have up to two spaces.'));
         });
 
         it('should throw an error for an invalid email', async () => {
@@ -76,7 +80,7 @@ describe('Customer Functions', () => {
             validationStub.isValidLastName.returns(true);
             validationStub.isValidEmail.returns(false);
             const wrapped = test.wrap(customerFunctions.registerCustomer);
-            await assert.rejects(() => wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123456' }), new Error('Invalid email format.'));
+            await assert.rejects(async () => await wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123456' }), new Error('Invalid email format.'));
         });
 
         it('should throw an error for an invalid password', async () => {
@@ -85,7 +89,7 @@ describe('Customer Functions', () => {
             validationStub.isValidEmail.returns(true);
             validationStub.isValidPassword.returns(false);
             const wrapped = test.wrap(customerFunctions.registerCustomer);
-            await assert.rejects(() => wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123' }), new Error('Password must be at least 6 characters long.'));
+            await assert.rejects(async () => await wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123' }), new Error('Password must be at least 6 characters long.'));
         });
 
         it('should throw an error for email already in use', async () => {
@@ -95,7 +99,7 @@ describe('Customer Functions', () => {
             validationStub.isValidPassword.returns(true);
             authServiceStub.createUser.rejects({ code: 'auth/email-already-exists' });
             const wrapped = test.wrap(customerFunctions.registerCustomer);
-            await assert.rejects(() => wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123456' }), new Error('The email address is already in use by another account.'));
+            await assert.rejects(async () => await wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123456' }), new Error('The email address is already in use by another account.'));
         });
 
         it('should throw an internal error for unexpected issues', async () => {
@@ -105,7 +109,7 @@ describe('Customer Functions', () => {
             validationStub.isValidPassword.returns(true);
             authServiceStub.createUser.rejects(new Error('Unexpected error'));
             const wrapped = test.wrap(customerFunctions.registerCustomer);
-            await assert.rejects(() => wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123456' }), new Error('An unexpected error occurred.'));
+            await assert.rejects(async () => await wrapped({ firstName: 'a', lastName: 'b', email: 'c@d.com', password: '123456' }), new Error('An unexpected error occurred.'));
         });
 
         it('should register a customer successfully', async () => {
@@ -125,13 +129,13 @@ describe('Customer Functions', () => {
     describe('getCustomerProfile', () => {
         it('should require authentication', async () => {
             const wrapped = test.wrap(customerFunctions.getCustomerProfile);
-            await assert.rejects(() => wrapped({}, {}), new Error('You must be logged in to view your profile.'));
+            await assert.rejects(async () => await wrapped({}, {}), new Error('You must be logged in to view your profile.'));
         });
 
         it('should throw an error if profile not found', async () => {
             docStub.get.resolves({ exists: false });
             const wrapped = test.wrap(customerFunctions.getCustomerProfile);
-            await assert.rejects(() => wrapped({}, { auth: { uid: 'customer-uid' } }), new Error('Your user profile was not found.'));
+            await assert.rejects(async () => await wrapped({}, { auth: { uid: 'customer-uid' } }), new Error('Your user profile was not found.'));
         });
 
         it('should return the customer profile successfully', async () => {
@@ -148,7 +152,7 @@ describe('Customer Functions', () => {
     describe('getCustomerTransactions', () => {
         it('should require authentication', async () => {
             const wrapped = test.wrap(customerFunctions.getCustomerTransactions);
-            await assert.rejects(() => wrapped({}, {}), new Error('You must be logged in to view your transactions.'));
+            await assert.rejects(async () => await wrapped({}, {}), new Error('You must be logged in to view your transactions.'));
         });
 
         it('should return an empty list if no transactions are found', async () => {

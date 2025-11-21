@@ -121,8 +121,9 @@ describe('User Functions', () => {
             const specificDocStub = {
                 get: sinon.stub().resolves({ exists: true }),
                 update: sinon.stub().resolves(),
+                set: sinon.stub().resolves(),
             };
-            collectionStub.returns({ doc: sinon.stub().withArgs('test-uid').returns(specificDocStub) });
+            collectionStub.returns({ doc: sinon.stub().returns(specificDocStub) });
             const wrapped = test.wrap(userFunctions.onUserCreate);
             await wrapped(user);
             assert(specificDocStub.update.calledOnceWith({ isVerified: true }));

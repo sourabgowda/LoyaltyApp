@@ -41,6 +41,20 @@ exports.registerCustomer = functions.https.onCall(async (data, context) => {
             assignedBunkId: 'NA' // Not applicable for customers
         });
 
+        // Log the transaction
+        const transactionRef = db.collection('transactions').doc();
+        await transactionRef.set({
+            type: 'customer_registration',
+            initiatorId: userRecord.uid,
+            initiatorRole: 'customer',
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            details: {
+                email: email,
+                firstName: firstName,
+                lastName: lastName
+            }
+        });
+
         return { status: 'success', message: 'Customer registered successfully.', uid: userRecord.uid };
 
     } catch (error) {
