@@ -12,9 +12,11 @@ const bunkAddStub = sinon.stub().resolves({ id: 'new-bunk-123' });
 const bunkUpdateStub = sinon.stub().resolves();
 const configSetStub = sinon.stub().resolves();
 const transactionSetStub = sinon.stub().resolves();
+const deleteUserStub = sinon.stub().resolves();
 
 const txGetStub = sinon.stub();
 const userGetStub = sinon.stub();
+const getCollectionsStub = sinon.stub().resolves([]);
 
 const userDocRef = { set: userSetStub, update: userUpdateStub, get: userGetStub, path: 'users/test-user' };
 const bunkDocRef = { get: txGetStub, update: bunkUpdateStub }; 
@@ -28,9 +30,9 @@ const transactionDocStub = sinon.stub().returns(transactionDocRef);
 
 const collectionStub = sinon.stub();
 collectionStub.withArgs('users').returns({ doc: userDocStub });
-collectionStub.withArgs('bunks').returns({ add: bunkAddStub, doc: bunkDocStub });
+collectionStub.withArgs('bunks').returns({ add: bunkAddStub, doc: bunkDocStub, get: getCollectionsStub });
 collectionStub.withArgs('configs').returns({ doc: configDocStub });
-collectionStub.withArgs('transactions').returns({ doc: transactionDocStub });
+collectionStub.withArgs('transactions').returns({ doc: transactionDocStub, get: getCollectionsStub });
 
 sinon.stub(admin, 'firestore').get(() => {
     const firestore = () => ({
@@ -60,7 +62,8 @@ sinon.stub(admin, 'auth').get(() => () => ({
   createUser: createUserStub,
   setCustomUserClaims: setCustomUserClaimsStub,
   getUserByEmail: getUserByEmailStub,
-  getUser: getUserStub
+  getUser: getUserStub,
+  deleteUser: deleteUserStub
 }));
 
 const myFunctions = require('../index.js');
@@ -79,7 +82,8 @@ describe('Cloud Functions', () => {
                      transactionSetStub, userDocStub, bunkDocStub, configDocStub, 
                      transactionDocStub, collectionStub, createUserStub, 
                      setCustomUserClaimsStub, isAdminStub, isManagerStub, 
-                     txGetStub, userGetStub, getUserByEmailStub, getUserDocStub, getUserStub];
+                     txGetStub, userGetStub, getUserByEmailStub, getUserDocStub, getUserStub,
+                     deleteUserStub, getCollectionsStub];
       stubs.forEach(s => s.resetHistory());
   });
 
@@ -351,6 +355,94 @@ describe('Cloud Functions', () => {
         const wrapped = test.wrap(myFunctions.onUserCreate);
         await wrapped({ uid: 'u', email: 'e', emailVerified: true });
         assert(userUpdateStub.notCalled);
+    });
+  });
+
+  describe('unassignManagerFromBunk', () => {
+    it('should unassign a manager from a bunk and log the transaction if admin', async () => {
+      isAdminStub.resolves(true);
+      bunkDocStub.returns({ get: () => ({ exists: true }), update: bunkUpdateStub });
+      const wrapped = test.wrap(myFunctions.unassignManagerFromBunk);
+      await wrapped({ managerUid: 'manager-uid', bunkId: 'bunk-123' }, { auth: { uid: 'admin-uid' } });
+      assert(userUpdateStub.calledOnceWith({ assignedBunkId: null }));
+      assert(bunkUpdateStub.calledOnceWith({ managerIds: 'ARRAY_REMOVE:manager-uid' }));
+      assert(transactionSetStub.calledOnce);
+    });
+  });
+
+  describe('deleteUser', () => {
+    it('should delete a user and log the transaction if admin', async () => {
+      isAdminStub.resolves(true);
+      const wrapped = test.wrap(myFunctions.deleteUser);
+      await wrapped({ uid: 'user-to-delete-uid' }, { auth: { uid: 'admin-uid' } });
+      assert(deleteUserStub.calledOnceWith('user-to-delete-uid'));
+      assert(userUpdateStub.calledOnceWith({ isDeleted: true }));
+      assert(transactionSetStub.calledOnce);
+    });
+  });
+
+  describe('getAllBunks', () => {
+    it('should return all bunks if admin', async () => {
+      isAdminStub.resolves(true);
+      const wrapped = test.wrap(myFunctions.getAllBunks);
+      await wrapped({}, { auth: { uid: 'admin-uid' } });
+      assert(getCollectionsStub.calledOnce);
+    });
+  });
+
+  describe('getAllTransactions', () => {
+    it('should return all transactions if admin', async () => {
+      isAdminStub.resolves(true);
+      const wrapped = test.wrap(myFunctions.getAllTransactions);
+      await wrapped({}, { auth: { uid: 'admin-uid' } });
+      assert(getCollectionsStub.calledOnce);
+    });
+  });
+
+  describe('updateUserProfile', () => {
+    it('should allow a user to update their own profile', async () => {
+      const wrapped = test.wrap(myFunctions.updateUserProfile);
+      await wrapped({ firstName: 'New', lastName: 'Name' }, { auth: { uid: 'user-uid' } });
+      assert(userUpdateStub.calledOnceWith({ firstName: 'New', lastName: 'Name' }));
+    });
+  });
+
+  describe('getAssignedBunk', () => {
+    it('should return the assigned bunk for a manager', async () => {
+      isManagerStub.resolves(true);
+      userGetStub.resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }) });
+      txGetStub.resolves({ exists: true, data: () => ({ name: 'Test Bunk' }) });
+      const wrapped = test.wrap(myFunctions.getAssignedBunk);
+      const result = await wrapped({}, { auth: { uid: 'manager-uid' } });
+      assert.deepStrictEqual(result, { name: 'Test Bunk' });
+    });
+  });
+
+  describe('getCustomerProfile', () => {
+    it('should return a customer profile for a manager', async () => {
+      isManagerStub.resolves(true);
+      userGetStub.resolves({ exists: true, data: () => ({ firstName: 'Customer', points: 100 }) });
+      const wrapped = test.wrap(myFunctions.getCustomerProfile);
+      const result = await wrapped({ customerId: 'cust-id' }, { auth: { uid: 'manager-uid' } });
+      assert.deepStrictEqual(result, { firstName: 'Customer', points: 100 });
+    });
+  });
+
+  describe('getCustomerTransactions', () => {
+    it('should return customer transactions for a manager', async () => {
+      isManagerStub.resolves(true);
+      const wrapped = test.wrap(myFunctions.getCustomerTransactions);
+      await wrapped({ customerId: 'cust-id' }, { auth: { uid: 'manager-uid' } });
+      assert(getCollectionsStub.calledOnce);
+    });
+  });
+
+  describe('getManagerTransactions', () => {
+    it('should return manager\'s transactions for a manager', async () => {
+      isManagerStub.resolves(true);
+      const wrapped = test.wrap(myFunctions.getManagerTransactions);
+      await wrapped({}, { auth: { uid: 'manager-uid' } });
+      assert(getCollectionsStub.calledOnce);
     });
   });
 });
