@@ -120,7 +120,7 @@ exports.unassignManagerFromBunk = functions.https.onCall(async (data, context) =
     }
     
     const managerRef = db.collection('users').doc(managerUid);
-    await managerRef.update({ assignedBunkId: 'NA' });
+    await managerRef.update({ assignedBunkId: null });
 
     await bunkRef.update({
         managerIds: admin.firestore.FieldValue.arrayRemove(managerUid)

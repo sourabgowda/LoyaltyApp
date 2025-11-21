@@ -13,11 +13,11 @@ exports.getAssignedBunk = functions.https.onCall(async (data, context) => {
     const managerUid = context.auth.uid;
     const userDoc = await auth.getUserDoc(managerUid);
 
-    if (!userDoc || !userDoc.assignedBunkId || userDoc.assignedBunkId === 'NA') {
+    if (!userDoc || !userDoc.data.assignedBunkId || userDoc.data.assignedBunkId === 'NA') {
         throw new functions.https.HttpsError('not-found', 'You are not assigned to any bunk.');
     }
 
-    const bunkRef = db.collection('bunks').doc(userDoc.assignedBunkId);
+    const bunkRef = db.collection('bunks').doc(userDoc.data.assignedBunkId);
     const bunkDoc = await bunkRef.get();
 
     if (!bunkDoc.exists) {

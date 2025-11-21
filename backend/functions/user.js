@@ -64,39 +64,51 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
     if (!context.auth || !(await auth.isAdmin(context.auth.token))) {
         throw new functions.https.HttpsError('permission-denied', 'Only admins can delete users.');
     }
-
-    const { email } = data;
-    if (!email) {
-        throw new functions.https.HttpsError('invalid-argument', 'Email is required.');
+    const adminId = context.auth.uid;
+    const { uid } = data;
+    if (!uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'UID is required.');
     }
 
     try {
-        const user = await admin.auth().getUserByEmail(email);
-        await admin.auth().deleteUser(user.uid);
-        return { status: 'success', message: `User ${email} deleted successfully.` };
+        const user = await admin.auth().getUser(uid);
+        await admin.auth().deleteUser(uid);
+        const userRef = db.collection('users').doc(uid);
+        await userRef.update({ isDeleted: true });
+
+        // Log the transaction
+        const transactionRef = db.collection('transactions').doc();
+        await transactionRef.set({
+            type: 'delete_user',
+            initiatorId: adminId,
+            initiatorRole: 'admin',
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            details: {
+                deletedUid: uid,
+                deletedEmail: user.email
+            }
+        });
+
+        return { status: 'success', message: `User ${uid} deleted successfully.` };
     } catch (error) {
         if (error.code === 'auth/user-not-found') {
-            throw new functions.https.HttpsError('not-found', `User with email ${email} not found.`);
+            throw new functions.https.HttpsError('not-found', `User with UID ${uid} not found.`);
         }
         throw new functions.https.HttpsError('internal', 'Error deleting user.');
     }
 });
 
 exports.updateUserProfile = functions.https.onCall(async (data, context) => {
-    if (!context.auth || !(await auth.isAdmin(context.auth.token))) {
-        throw new functions.https.HttpsError('permission-denied', 'Only admins can update user profiles.');
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to update your profile.');
     }
 
-    const adminId = context.auth.uid;
-    const { targetUid, firstName, lastName } = data;
+    const uid = context.auth.uid;
+    const { firstName, lastName } = data;
 
-    if (!targetUid) {
-        throw new functions.https.HttpsError('invalid-argument', 'A targetUid is required.');
-    }
-
-    const user = await auth.getUserDoc(targetUid);
+    const user = await auth.getUserDoc(uid);
     if (!user) {
-        throw new functions.https.HttpsError('not-found', 'The target user does not exist.');
+        throw new functions.https.HttpsError('not-found', 'The user does not exist.');
     }
 
     const updateData = {};
@@ -118,18 +130,17 @@ exports.updateUserProfile = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'At least one field to update must be provided.');
     }
 
-    const userRef = db.collection('users').doc(targetUid);
+    const userRef = db.collection('users').doc(uid);
     await userRef.update(updateData);
 
     // Log the transaction
     const transactionRef = db.collection('transactions').doc();
     await transactionRef.set({
         type: 'update_user_profile',
-        initiatorId: adminId,
-        initiatorRole: 'admin',
+        initiatorId: uid,
+        initiatorRole: user.data.role,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
         details: {
-            targetUid: targetUid,
             updatedFields: updateData
         }
     });

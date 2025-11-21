@@ -32,7 +32,7 @@ const collectionStub = sinon.stub();
 collectionStub.withArgs('users').returns({ doc: userDocStub });
 collectionStub.withArgs('bunks').returns({ add: bunkAddStub, doc: bunkDocStub, get: getCollectionsStub });
 collectionStub.withArgs('configs').returns({ doc: configDocStub });
-collectionStub.withArgs('transactions').returns({ doc: transactionDocStub, get: getCollectionsStub });
+collectionStub.withArgs('transactions').returns({ doc: transactionDocStub, get: getCollectionsStub, where: () => ({ orderBy: () => ({ get: getCollectionsStub }) }) });
 
 sinon.stub(admin, 'firestore').get(() => {
     const firestore = () => ({
@@ -401,6 +401,7 @@ describe('Cloud Functions', () => {
 
   describe('updateUserProfile', () => {
     it('should allow a user to update their own profile', async () => {
+      getUserDocStub.resolves({ role: 'customer' });
       const wrapped = test.wrap(myFunctions.updateUserProfile);
       await wrapped({ firstName: 'New', lastName: 'Name' }, { auth: { uid: 'user-uid' } });
       assert(userUpdateStub.calledOnceWith({ firstName: 'New', lastName: 'Name' }));
@@ -410,11 +411,11 @@ describe('Cloud Functions', () => {
   describe('getAssignedBunk', () => {
     it('should return the assigned bunk for a manager', async () => {
       isManagerStub.resolves(true);
-      userGetStub.resolves({ exists: true, data: () => ({ assignedBunkId: 'bunk-123' }) });
+      getUserDocStub.resolves({ assignedBunkId: 'bunk-123' });
       txGetStub.resolves({ exists: true, data: () => ({ name: 'Test Bunk' }) });
       const wrapped = test.wrap(myFunctions.getAssignedBunk);
       const result = await wrapped({}, { auth: { uid: 'manager-uid' } });
-      assert.deepStrictEqual(result, { name: 'Test Bunk' });
+      assert.deepStrictEqual(result, { status: 'success', bunk: { id: undefined, name: 'Test Bunk' } });
     });
   });
 
@@ -424,7 +425,7 @@ describe('Cloud Functions', () => {
       userGetStub.resolves({ exists: true, data: () => ({ firstName: 'Customer', points: 100 }) });
       const wrapped = test.wrap(myFunctions.getCustomerProfile);
       const result = await wrapped({ customerId: 'cust-id' }, { auth: { uid: 'manager-uid' } });
-      assert.deepStrictEqual(result, { firstName: 'Customer', points: 100 });
+      assert.deepStrictEqual(result, { status: 'success', profile: { firstName: 'Customer', points: 100 } });
     });
   });
 
