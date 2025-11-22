@@ -51,6 +51,7 @@ exports.creditPoints = functions.https.onCall(async (data, context) => {
         type: 'credit',
         initiatorId: managerId,
         initiatorRole: 'manager',
+        participants: [managerId, customerId],
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
         details: {
             targetUid: customerId,
@@ -109,6 +110,7 @@ exports.redeemPoints = functions.https.onCall(async (data, context) => {
         type: 'redeem',
         initiatorId: managerId,
         initiatorRole: 'manager',
+        participants: [managerId, customerId],
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
         details: {
             targetUid: customerId,

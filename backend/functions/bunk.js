@@ -27,6 +27,7 @@ exports.createBunk = functions.https.onCall(async (data, context) => {
         type: 'create_bunk',
         initiatorId: adminId,
         initiatorRole: 'admin',
+        participants: [adminId],
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
         details: {
             bunkId: docRef.id,
@@ -81,6 +82,7 @@ exports.assignManagerToBunk = functions.https.onCall(async (data, context) => {
       type: 'assign_manager',
       initiatorId: adminId,
       initiatorRole: 'admin',
+      participants: [adminId, managerUid],
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       details: {
           managerUid: managerUid,
@@ -132,6 +134,7 @@ exports.unassignManagerFromBunk = functions.https.onCall(async (data, context) =
         type: 'unassign_manager',
         initiatorId: adminId,
         initiatorRole: 'admin',
+        participants: [adminId, managerUid],
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
         details: {
             managerUid: managerUid,
@@ -173,6 +176,7 @@ exports.deleteBunk = functions.https.onCall(async (data, context) => {
         type: 'delete_bunk',
         initiatorId: adminId,
         initiatorRole: 'admin',
+        participants: [adminId, ...managerIds],
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
         details: {
             bunkId: bunkId,

@@ -1,4 +1,3 @@
-
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const auth = require('./utils/auth');
@@ -35,7 +34,7 @@ exports.getManagerTransactions = functions.https.onCall(async (data, context) =>
     const managerUid = context.auth.uid;
 
     const transactionsSnapshot = await db.collection('transactions')
-        .where('initiatorId', '==', managerUid)
+        .where('participants', 'array-contains', managerUid)
         .orderBy('timestamp', 'desc')
         .get();
 

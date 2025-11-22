@@ -5,16 +5,18 @@
   "main": "run_tests.js",
   "scripts": {
     "clear-db": "node clear_database.js",
+    "create-indexes": "node create_indexes.js",
     "setup-users": "node setup_users.js",
     "set-custom-claims": "node set_custom_claims.js",
     "get-tokens": "node get_tokens.js",
-    "test": "firebase emulators:exec --only firestore \"npm run clear-db && npm run setup-users && npm run set-custom-claims && npm run get-tokens && node run_tests_and_record.js\"",
-    "e2e": "npm run clear-db && npm run setup-users && npm run set-custom-claims && npm run get-tokens && npm run test",
+    "test": "firebase --config ../../firebase.json emulators:exec --only firestore \"npm run clear-db && npm run create-indexes && npm run setup-users && npm run set-custom-claims && npm run get-tokens && node run_tests_and_record.js\"",
+    "e2e": "npm run clear-db && npm run create-indexes && npm run setup-users && npm run set-custom-claims && npm run get-tokens && npm run test",
     "day-in-the-life": "npm run setup-users && npm run set-custom-claims && npm run get-tokens && node day_in_the_life.js"
   },
   "dependencies": {
     "axios": "^1.4.0",
     "firebase": "^10.0.0",
-    "firebase-admin": "^11.10.1"
+    "firebase-admin": "^11.10.1",
+    "@google-cloud/firestore": "^7.7.0"
   }
 }

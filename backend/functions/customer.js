@@ -47,6 +47,7 @@ exports.registerCustomer = functions.https.onCall(async (data, context) => {
             type: 'customer_registration',
             initiatorId: userRecord.uid,
             initiatorRole: 'customer',
+            participants: [userRecord.uid],
             timestamp: admin.firestore.FieldValue.serverTimestamp(),
             details: {
                 email: email,
@@ -89,7 +90,7 @@ exports.getCustomerTransactions = functions.https.onCall(async (data, context) =
     const customerUid = context.auth.uid;
 
     const transactionsSnapshot = await db.collection('transactions')
-        .where('details.targetUid', '==', customerUid)
+        .where('participants', 'array-contains', customerUid)
         .orderBy('timestamp', 'desc')
         .get();
 
