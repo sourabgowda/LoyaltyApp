@@ -1,4 +1,4 @@
-# Fuel Loyalty and Rewards App - Backend
+# Fuel Loyalty and Rewards App
 
 This is the backend for a fuel loyalty program, built on Firebase. It provides a secure and scalable foundation for a loyalty application, with a role-based system for customers, managers, and administrators.
 
@@ -28,6 +28,9 @@ This is the backend for a fuel loyalty program, built on Firebase. It provides a
 - **Key Backend Dependencies:**
   - `firebase-admin`: For privileged backend access to the Firebase project.
   - `firebase-functions`: The SDK for writing Cloud Functions.
+- **Frontend:**
+  - [Flutter](https://flutter.dev) (for the cross-platform mobile app)
+  - [Provider](https://pub.dev/packages/provider) (for state management)
 
 ---
 
@@ -39,6 +42,7 @@ Follow these steps to set up and run the backend services locally.
 
 - [Node.js](https://nodejs.org/) (v20, as specified in `backend/functions/package.json`)
 - [Firebase CLI](https://firebase.google.com/docs/cli)
+- [Flutter SDK](https://flutter.dev/docs/get-started/install)
 
 ### 1. Firebase Project Setup
 
@@ -72,6 +76,25 @@ To deploy the Firebase Cloud Functions, follow these steps:
     firebase deploy --only functions
     ```
     This command will upload and activate your backend logic on Firebase.
+
+### 3. Run the Frontend
+
+1.  **Navigate to the Frontend Directory:**
+    Open your terminal and navigate to the `frontend` directory:
+    ```bash
+    cd frontend
+    ```
+
+2.  **Install Dependencies:**
+    Install the required Dart packages:
+    ```bash
+    flutter pub get
+    ```
+
+3.  **Run the App:**
+    ```bash
+    flutter run
+    ```
 
 ---
 
@@ -129,9 +152,10 @@ The E2E tests simulate real user scenarios and require a configured Firebase pro
 
 ```
 .
+├── frontend/            # Contains the Flutter mobile app.
 ├── backend/             # Contains all the backend-related code
 │   ├── functions/       # Contains the Node.js backend Cloud Functions.
-│   └── e2e_test/        # End-to-end tests for the backend.
+│   └── e2E_test/        # End-to-end tests for the backend.
 ├── DB_SCHEMA.md         # The database schema documentation.
 ├── README_ROLES.md      # Detailed documentation of user roles.
 └── firestore.rules      # Security rules for the Firestore database.
